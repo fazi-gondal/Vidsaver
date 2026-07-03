@@ -1,56 +1,171 @@
-[project]
-name = "vidsaver"
-version = "0.1.0"
-description = ""
-readme = "README.md"
-requires-python = ">=3.10"
-authors = [
-    { name = "Fazi-Gondal", email = "nextinpk@gmail.com" }
-]
-dependencies = [
-    "flet>=0.85.3",
-    "flet-video>=0.85.3",
-    "flet-permission-handler>=0.85.3",
-    "yt-dlp",
-    "requests"
-]
+# docs: https://docs.flet.dev/publish/#github-actions/
+# Android signing docs: https://flet.dev/docs/publish/android#signing-an-android-bundle
 
-[dependency-groups]
-dev = [
-    "flet-cli>=0.85.3",
-    "flet-desktop>=0.85.3",
-    "flet-web>=0.85.3",
-]
+name: Build Flet App
 
-[tool.flet]
-org = "com.fazi.vidsaver"
-product = "flet"
-company = "NextInPK"
-copyright = "Copyright (C) 2023-2026 by Fazi-Gondal"
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"] # a release is only PUBLISHED for tag pushes (see the release job below)
+  pull_request:
+  workflow_dispatch:
 
-[tool.flet.icons]
-android = "assets/icon.png"
-splash_android = "assets/splash_android.png"
+env:
+  UV_PYTHON: 3.12
+  PYTHONUTF8: 1
 
-[tool.flet.app]
-path = "src"
+  # https://docs.flet.dev/reference/environment-variables
+  FLET_CLI_NO_RICH_OUTPUT: 1
 
-[tool.flet.android.permission]
-# Sideloaded app (not on Play Store), so MANAGE_EXTERNAL_STORAGE is fine here —
-# it's the permission requested at runtime via ft.PermissionHandler in main.py.
-"android.permission.MANAGE_EXTERNAL_STORAGE" = true
-"android.permission.READ_EXTERNAL_STORAGE" = true
-"android.permission.WRITE_EXTERNAL_STORAGE" = true
-"android.permission.INTERNET" = true
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # -------- Desktop --------
+          - name: linux
+            runner: ubuntu-latest
+            build_cmd: "flet build linux"
+            artifact_path: build/linux
+            needs_linux_deps: true
 
-[tool.flet.android.signing]
-# Only non-secret values go here (this file is committed to git).
-# key_store is a path *relative to the project root* — the CI workflow
-# generates a fresh upload-keystore.jks at exactly this path before running
-# `flet build apk`, so this reference resolves without any extra CLI flags.
-# The store/key passwords are supplied at build time only, via the
-# FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD / FLET_ANDROID_SIGNING_KEY_PASSWORD
-# env vars — never written to this file.
-# https://flet.dev/docs/publish/android#signing-an-android-bundle
-key_alias = "upload"
-key_store = "upload-keystore.jks"
+          - name: macos
+            runner: macos-latest
+            build_cmd: "flet build macos"
+            artifact_path: build/macos
+            needs_linux_deps: false
+
+          - name: windows
+            runner: windows-latest
+            build_cmd: "flet build windows"
+            artifact_path: build/windows
+            needs_linux_deps: false
+
+          # -------- Android --------
+          - name: aab
+            runner: ubuntu-latest
+            build_cmd: "flet build aab"
+            artifact_path: build/aab
+            needs_linux_deps: false
+
+          - name: apk
+            runner: ubuntu-latest
+            # --split-per-abi + --arch arm64-v8a produces a single arm64-v8a-only
+            # APK instead of the default "fat" APK bundling every ABI.
+            # https://flet.dev/docs/publish/android#split-apk-per-abi
+            build_cmd: "flet build apk --split-per-abi --arch arm64-v8a"
+            artifact_path: build/apk
+            needs_linux_deps: false
+
+          # -------- iOS --------
+          - name: ipa
+            runner: macos-latest
+            build_cmd: "flet build ipa"
+            artifact_path: build/ipa
+            needs_linux_deps: false
+
+          # -------- Web --------
+          - name: web
+            runner: ubuntu-latest
+            build_cmd: "flet build web"
+            artifact_path: build/web
+            needs_linux_deps: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install Linux dependencies
+        if: matrix.needs_linux_deps
+        shell: bash
+        run: |
+          sudo apt update --allow-releaseinfo-change
+          sudo apt-get install -y --no-install-recommends \
+            clang ninja-build libgtk-3-dev libasound2-dev libmpv-dev mpv \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
+            gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-gtk3 \
+            gstreamer1.0-qt5 gstreamer1.0-pulseaudio pkg-config libsecret-1-0 libsecret-1-dev
+          sudo apt-get clean
+
+      # ---- Android signing: keystore generated fresh on every run ----
+      # No secrets to manage or rotate. Trade-off: the signing key is
+      # different every build, so Android will refuse to install a new APK
+      # over an existing install of an older build — uninstall first each
+      # time. Fine for a sideloaded personal-use app; NOT suitable if you
+      # ever need seamless updates or Play Store distribution (those require
+      # the same signing key across releases — see the docs link above).
+      - name: Setup JDK (for keytool)
+        if: matrix.name == 'apk'
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Generate Android upload keystore
+        if: matrix.name == 'apk'
+        shell: bash
+        run: |
+          PW=$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 32)
+          echo "::add-mask::$PW"
+          echo "KEYSTORE_PW=$PW" >> "$GITHUB_ENV"
+          keytool -genkeypair -v \
+            -keystore upload-keystore.jks \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -alias upload \
+            -storepass "$PW" -keypass "$PW" \
+            -dname "CN=VidSaver, OU=Dev, O=Faizan, L=Lahore, ST=Punjab, C=PK" \
+            -noprompt
+          # upload-keystore.jks now sits at the repo root, matching
+          # `key_store = "upload-keystore.jks"` in pyproject.toml.
+
+      - name: Build app
+        shell: bash
+        env:
+          # Only populated for the apk job (KEYSTORE_PW is unset elsewhere,
+          # so this is harmlessly empty for every other matrix entry).
+          FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ env.KEYSTORE_PW }}
+          FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ env.KEYSTORE_PW }}
+        run: |
+          uv run ${{ matrix.build_cmd }} --yes --verbose
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v5.0.0
+        with:
+          name: ${{ matrix.name }}-build-artifact
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
+          overwrite: false
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # required for creating/updating a release
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: apk-build-artifact
+          path: dist/apk
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: windows-build-artifact
+          path: dist/windows
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/apk/**/*.apk
+            dist/windows/**/*.exe
