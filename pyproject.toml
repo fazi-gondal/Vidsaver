@@ -1,0 +1,56 @@
+[project]
+name = "flet"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Fazi-Gondal", email = "nextinpk@gmail.com" }
+]
+dependencies = [
+    "flet>=0.85.3",
+    "flet-video>=0.85.3",
+    "flet-permission-handler>=0.85.3",
+    "yt-dlp",
+    "requests"
+]
+
+[dependency-groups]
+dev = [
+    "flet-cli>=0.85.3",
+    "flet-desktop>=0.85.3",
+    "flet-web>=0.85.3",
+]
+
+[tool.flet]
+org = "com.fazi.vidsaver"
+product = "flet"
+company = "NextInPK"
+copyright = "Copyright (C) 2023-2026 by Fazi-Gondal"
+
+[tool.flet.icons]
+android = "assets/icon.png"
+splash_android = "assets/splash_android.png"
+
+[tool.flet.app]
+path = "src"
+
+[tool.flet.android.permission]
+# Sideloaded app (not on Play Store), so MANAGE_EXTERNAL_STORAGE is fine here —
+# it's the permission requested at runtime via ft.PermissionHandler in main.py.
+"android.permission.MANAGE_EXTERNAL_STORAGE" = true
+"android.permission.READ_EXTERNAL_STORAGE" = true
+"android.permission.WRITE_EXTERNAL_STORAGE" = true
+"android.permission.INTERNET" = true
+
+[tool.flet.android.signing]
+# Only non-secret values go here (this file is committed to git).
+# key_store is a path *relative to the project root* — the CI workflow
+# generates a fresh upload-keystore.jks at exactly this path before running
+# `flet build apk`, so this reference resolves without any extra CLI flags.
+# The store/key passwords are supplied at build time only, via the
+# FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD / FLET_ANDROID_SIGNING_KEY_PASSWORD
+# env vars — never written to this file.
+# https://flet.dev/docs/publish/android#signing-an-android-bundle
+key_alias = "upload"
+key_store = "upload-keystore.jks"
