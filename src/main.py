@@ -26,14 +26,18 @@ async def main(page: ft.Page):
     page_max_height = page.height or 0
 
     async def handle_page_resize(e):
-        nonlocal page_max_height
+        nonlocal page_max_height, url_input_focused
         if page.height and page.height > page_max_height:
             page_max_height = page.height
-        if url_input_focused and page.height and page.height >= page_max_height:
-            try:
-                await download_btn.focus()
-            except Exception:
-                pass
+        # When the page height grows back to (or beyond) the recorded max, the
+        # keyboard has closed. on_blur is unreliable on Android (back-button
+        # dismiss doesn't always trigger it), so restore the nav bar here too.
+        if page.height and page_max_height and page.height >= page_max_height:
+            url_input_focused = False  # treat keyboard-closed as blur
+            if page.navigation_bar and main_container.content != player_view:
+                if not page.navigation_bar.visible:
+                    page.navigation_bar.visible = True
+                    page.update()
 
     page.on_resize = handle_page_resize
 
@@ -252,19 +256,26 @@ async def main(page: ft.Page):
     player_title = ft.Text(value="", weight=ft.FontWeight.BOLD, size=16)
 
     async def close_player(e):
-        # Swap back to the library view structure FIRST so the transition
-        # feels instant. Pausing media_kit's native player can take a beat
-        # to round-trip, so we don't want the screen swap waiting on it.
-        main_container.content = library_view
-        main_container.alignment = None  # library also relies on an expand=True chain
-        page.navigation_bar.visible = True
-        page.update()
+        # IMPORTANT: pause() MUST be called while video_player_control is still
+        # in the widget tree. If we call page.update() first (swapping the content),
+        # Flet deregisters the control and the pause() invoke-method response comes
+        # back to an unknown control ID → RuntimeError "Control with ID X is not registered".
         try:
             await video_player_control.pause()
         except Exception:
             pass
+        # Now it's safe to swap the view — the control is paused and any pending
+        # round-trips have completed before we remove it from the tree.
+        main_container.content = library_view
+        main_container.alignment = None  # library also relies on an expand=True chain
+        page.navigation_bar.visible = True
+        page.update()
 
-    video_player_control.on_complete = close_player
+    # NOTE: on_complete is intentionally NOT set here.
+    # Setting on_complete = close_player caused the player view to auto-close
+    # the moment a new playlist was assigned, because media_kit fires the
+    # "complete" event when the previous session ends during playlist replacement.
+    # The user closes the player manually with the ✕ button.
 
     # 🌟 FIXED: Created an explicit Full-Screen Player interface view layout
     player_view = ft.Container(

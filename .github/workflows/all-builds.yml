@@ -1,5 +1,4 @@
 # docs: https://docs.flet.dev/publish/#github-actions/
-# Android signing docs: https://flet.dev/docs/publish/android#signing-an-android-bundle
 
 name: Build Flet App
 
@@ -94,44 +93,8 @@ jobs:
             gstreamer1.0-qt5 gstreamer1.0-pulseaudio pkg-config libsecret-1-0 libsecret-1-dev
           sudo apt-get clean
 
-      # ---- Android signing: keystore generated fresh on every run ----
-      # No secrets to manage or rotate. Trade-off: the signing key is
-      # different every build, so Android will refuse to install a new APK
-      # over an existing install of an older build — uninstall first each
-      # time. Fine for a sideloaded personal-use app; NOT suitable if you
-      # ever need seamless updates or Play Store distribution (those require
-      # the same signing key across releases — see the docs link above).
-      - name: Setup JDK (for keytool)
-        if: matrix.name == 'apk'
-        uses: actions/setup-java@v4
-        with:
-          distribution: "temurin"
-          java-version: "17"
-
-      - name: Generate Android upload keystore
-        if: matrix.name == 'apk'
-        shell: bash
-        run: |
-          PW=$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 32)
-          echo "::add-mask::$PW"
-          echo "KEYSTORE_PW=$PW" >> "$GITHUB_ENV"
-          keytool -genkeypair -v \
-            -keystore upload-keystore.jks \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -alias upload \
-            -storepass "$PW" -keypass "$PW" \
-            -dname "CN=VidSaver, OU=Dev, O=Faizan, L=Lahore, ST=Punjab, C=PK" \
-            -noprompt
-          # upload-keystore.jks now sits at the repo root, matching
-          # `key_store = "upload-keystore.jks"` in pyproject.toml.
-
       - name: Build app
         shell: bash
-        env:
-          # Only populated for the apk job (KEYSTORE_PW is unset elsewhere,
-          # so this is harmlessly empty for every other matrix entry).
-          FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ env.KEYSTORE_PW }}
-          FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ env.KEYSTORE_PW }}
         run: |
           uv run ${{ matrix.build_cmd }} --yes --verbose
 

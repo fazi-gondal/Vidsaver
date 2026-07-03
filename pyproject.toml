@@ -42,15 +42,3 @@ path = "src"
 "android.permission.READ_EXTERNAL_STORAGE" = true
 "android.permission.WRITE_EXTERNAL_STORAGE" = true
 "android.permission.INTERNET" = true
-
-[tool.flet.android.signing]
-# Only non-secret values go here (this file is committed to git).
-# key_store is a path *relative to the project root* — the CI workflow
-# generates a fresh upload-keystore.jks at exactly this path before running
-# `flet build apk`, so this reference resolves without any extra CLI flags.
-# The store/key passwords are supplied at build time only, via the
-# FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD / FLET_ANDROID_SIGNING_KEY_PASSWORD
-# env vars — never written to this file.
-# https://flet.dev/docs/publish/android#signing-an-android-bundle
-key_alias = "upload"
-key_store = "upload-keystore.jks"
