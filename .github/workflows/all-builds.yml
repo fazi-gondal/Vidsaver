@@ -4,11 +4,8 @@ name: Build & Release Vidsaver
 
 on:
   push:
-    branches:
-      - "**"
     tags:
       - "v*"
-  pull_request:
   workflow_dispatch:
 
 concurrency:
