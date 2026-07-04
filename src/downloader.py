@@ -246,6 +246,8 @@ def run_download(url: str, target_dir: str, cookie_path: str,
         on_status("Analyzing video…")   # info-extraction phase: no hooks fire yet
         page.update()
         with YoutubeDL(ydl_opts) as ydl:
+            on_status("Downloading video...")
+            page.update()
             ydl.download([url])
 
         # Persist metadata for newly created files
