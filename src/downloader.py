@@ -86,12 +86,8 @@ def resolve_short_url(url: str) -> str:
 
 
 def preload_heavy_modules():
-    """Import yt-dlp and requests in a background thread so first download is instant."""
-    try:
-        import requests       # noqa
-        from yt_dlp import YoutubeDL  # noqa
-    except Exception:
-        pass
+    """Kept for compatibility; downloads import network packages on demand."""
+    return
 
 
 def scan_android_media(paths: list[str]) -> bool:

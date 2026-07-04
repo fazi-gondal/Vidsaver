@@ -13,7 +13,10 @@ dependencies = [
     "flet-permission-handler>=0.85.3",
     "yt-dlp",
     "requests",
-    "certifi"
+    "certifi",
+    "charset-normalizer",
+    "idna",
+    "urllib3"
 ]
 
 [dependency-groups]
@@ -35,6 +38,18 @@ splash_android = "assets/splash_android.png"
 
 [tool.flet.app]
 path = "src"
+
+[tool.flet.android]
+split_per_abi = true
+target_arch = ["arm64-v8a"]
+dependencies = [
+    "certifi",
+    "charset-normalizer",
+    "idna",
+    "requests",
+    "urllib3",
+    "yt-dlp",
+]
 
 [tool.flet.android.permission]
 # Sideloaded app (not on Play Store), so MANAGE_EXTERNAL_STORAGE is fine here —
