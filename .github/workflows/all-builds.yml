@@ -39,7 +39,7 @@ jobs:
           # -------- Android APK (arm64-v8a only) --------
           - name: apk
             runner: ubuntu-latest
-            build_cmd: "flet build apk --clear-cache --split-per-abi --arch arm64-v8a"
+            build_cmd: "flet build apk --split-per-abi --arch arm64-v8a"
             artifact_path: "build/apk"
             linux_deps: false
             android_signing: true
@@ -93,57 +93,6 @@ jobs:
           cache-dependency-glob: |
             pyproject.toml
             uv.lock
-
-      - name: Install Python dependencies
-        shell: bash
-        run: |
-          uv sync --all-groups --prerelease=allow
-
-      - name: Patch Flet 0.86 dev Android app.zip packaging
-        if: matrix.android_signing
-        shell: bash
-        run: |
-          uv run python - <<'PY'
-          from pathlib import Path
-          import flet_cli.commands.build_base as build_base
-
-          path = Path(build_base.__file__)
-          text = path.read_text(encoding="utf-8")
-          marker = "        console.log(f\"Packaged Python app {self.emojis['checkmark']}\")\n"
-          patch = (
-              "        console.log(f\"Packaged Python app {self.emojis['checkmark']}\")\n"
-              "\n"
-              "        # Temporary workaround for flet-cli 0.86.0.dev1 Android builds.\n"
-              "        # The generated pubspec.yaml lists app/app.zip, but this prerelease can\n"
-              "        # reach Flutter asset bundling before the Android Gradle packaging task\n"
-              "        # creates that file. Build the real app.zip from serious-python's staged\n"
-              "        # app directory so Flutter receives the expected asset.\n"
-              "        if self.package_platform == \"Android\":\n"
-              "            import zipfile\n"
-              "\n"
-              "            staged_app_dir = self.build_dir / \"python-app\"\n"
-              "            android_app_zip = self.flutter_dir / \"app\" / \"app.zip\"\n"
-              "            if staged_app_dir.exists():\n"
-              "                android_app_zip.parent.mkdir(parents=True, exist_ok=True)\n"
-              "                with zipfile.ZipFile(\n"
-              "                    android_app_zip, \"w\", compression=zipfile.ZIP_STORED\n"
-              "                ) as archive:\n"
-              "                    for item in staged_app_dir.rglob(\"*\"):\n"
-              "                        if item.is_file():\n"
-              "                            archive.write(\n"
-              "                                item,\n"
-              "                                item.relative_to(staged_app_dir).as_posix(),\n"
-              "                            )\n"
-          )
-
-          if patch in text:
-              print("Flet Android app.zip patch already applied.")
-          elif marker in text:
-              path.write_text(text.replace(marker, patch), encoding="utf-8")
-              print(f"Patched {path}")
-          else:
-              raise SystemExit(f"Could not find Flet patch marker in {path}")
-          PY
 
       - name: Install Linux dependencies
         if: matrix.linux_deps
