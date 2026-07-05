@@ -158,6 +158,28 @@ def scan_android_media(paths: list[str]) -> bool:
         return False
 
 
+def collect_downloaded_paths(info) -> list[str]:
+    """Return final downloaded file paths from yt-dlp info dictionaries."""
+    paths = []
+
+    def add_from(item):
+        if not isinstance(item, dict):
+            return
+        for download in item.get('requested_downloads') or []:
+            path = download.get('filepath') or download.get('filename')
+            if path:
+                paths.append(path)
+        for key in ('filepath', '_filename', 'filename'):
+            path = item.get(key)
+            if path:
+                paths.append(path)
+        for entry in item.get('entries') or []:
+            add_from(entry)
+
+    add_from(info)
+    return paths
+
+
 def run_download(url: str, target_dir: str, cookie_path: str,
                  metadata_path: str,
                  on_status,   # callable(str)
@@ -199,7 +221,7 @@ def run_download(url: str, target_dir: str, cookie_path: str,
             page.update()
 
     ydl_opts = {
-        'outtmpl':    os.path.join(target_dir, '%(title)s.%(ext)s'),
+        'outtmpl':    os.path.join(target_dir, '%(title).80s [%(id)s].%(ext)s'),
         'progress_hooks': [_hook],
         'cookiefile': cookie_path,
 
@@ -238,10 +260,13 @@ def run_download(url: str, target_dir: str, cookie_path: str,
         },
     }
 
-    before = (
-        set(f for f in os.listdir(target_dir) if f.lower().endswith(VIDEO_EXTENSIONS))
-        if os.path.exists(target_dir) else set()
-    )
+    before = {}
+    if os.path.exists(target_dir):
+        before = {
+            f: os.path.getmtime(os.path.join(target_dir, f))
+            for f in os.listdir(target_dir)
+            if f.lower().endswith(VIDEO_EXTENSIONS)
+        }
 
     try:
         if 'yt_dlp' not in sys.modules:
@@ -254,17 +279,26 @@ def run_download(url: str, target_dir: str, cookie_path: str,
         with YoutubeDL(ydl_opts) as ydl:
             on_status("Downloading video...")
             page.update()
-            ydl.download([url])
+            info = ydl.extract_info(url, download=True)
+            downloaded_paths.extend(collect_downloaded_paths(info))
 
         # Persist metadata for newly created files
-        after = set(f for f in os.listdir(target_dir) if f.lower().endswith(VIDEO_EXTENSIONS))
-        new_files = after - before
+        after = {
+            f: os.path.getmtime(os.path.join(target_dir, f))
+            for f in os.listdir(target_dir)
+            if f.lower().endswith(VIDEO_EXTENSIONS)
+        }
+        new_files = set(after) - set(before)
+        updated_files = {
+            f for f, mtime in after.items()
+            if f in before and mtime > before[f]
+        }
         detected_paths = [
             path for path in downloaded_paths
             if path and os.path.exists(path) and path.lower().endswith(VIDEO_EXTENSIONS)
         ]
         detected_files = {os.path.basename(path) for path in detected_paths}
-        saved_files = sorted(new_files | detected_files)
+        saved_files = sorted(new_files | updated_files | detected_files)
 
         if saved_files:
             meta = load_metadata(metadata_path)
