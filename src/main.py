@@ -182,10 +182,15 @@ async def main(page: ft.Page):
             return
 
         async def delayed_scan():
-            from downloader import scan_android_media
+            from downloader import mark_files_recent, scan_android_media
 
-            for delay in (2, 8, 20):
+            # Retry over 60 s — matches the window in which File Manager
+            # triggers MediaStore updates that WhatsApp / TikTok / Instagram
+            # pick up. Earlier retries catch fast devices; later ones catch
+            # devices that lazily update their media database.
+            for delay in (1, 3, 8, 20, 60):
                 await asyncio.sleep(delay)
+                await asyncio.to_thread(mark_files_recent, paths)
                 await asyncio.to_thread(scan_android_media, paths)
 
         loop.call_soon_threadsafe(lambda: asyncio.create_task(delayed_scan()))

@@ -96,76 +96,121 @@ def preload_heavy_modules():
 def scan_android_media(paths: list[str]) -> bool:
     """
     Ask Android to index newly saved media files so they appear in Gallery
-    and video player apps without waiting for a device-wide media scan.
+    and video player apps (WhatsApp, TikTok, Instagram) without waiting for
+    a device-wide media scan.
+
+    Strategy (each method tried in order, first success wins):
+      1. jnius MediaScannerConnection.scanFile()  — most reliable on API 29+
+      2. jnius ACTION_MEDIA_SCANNER_SCAN_FILE broadcast — API < 29 fallback
+      3. `am broadcast` shell: ACTION_MEDIA_SCANNER_SCAN_FILE per file
+      4. `am broadcast` shell: ACTION_MEDIA_CHANGED on parent directory
+         (triggers a directory-level rescan understood by modern Android)
     """
     file_paths = [path for path in paths if path and os.path.isfile(path)]
+    if not file_paths or not os.path.exists("/storage/emulated/0"):
+        return False
+
     dir_paths = sorted({
         os.path.dirname(path)
         for path in file_paths
         if os.path.isdir(os.path.dirname(path))
     })
-    scan_targets = file_paths + dir_paths
 
-    if not file_paths or not os.path.exists("/storage/emulated/0"):
-        return False
-
+    # ── 1. jnius MediaScannerConnection (recommended API 29+) ────────────────
     try:
         from jnius import autoclass
-
         activity_thread = autoclass("android.app.ActivityThread")
         context = activity_thread.currentApplication().getApplicationContext()
-
         media_scanner = autoclass("android.media.MediaScannerConnection")
+        paths_array = file_paths
         mime_types = [
-            mimetypes.guess_type(path)[0] or "video/*"
-            for path in file_paths
+            mimetypes.guess_type(p)[0] or "video/mp4"
+            for p in paths_array
         ]
-        media_scanner.scanFile(context, file_paths, mime_types, None)
+        media_scanner.scanFile(context, paths_array, mime_types, None)
         return True
     except Exception:
         pass
 
+    # ── 2. jnius broadcast (API < 29) ────────────────────────────────────────
     try:
         from jnius import autoclass
-
         activity_thread = autoclass("android.app.ActivityThread")
         context = activity_thread.currentApplication().getApplicationContext()
-        intent = autoclass("android.content.Intent")
-        uri = autoclass("android.net.Uri")
-        java_file = autoclass("java.io.File")
-
-        for path in scan_targets:
+        Intent = autoclass("android.content.Intent")
+        Uri = autoclass("android.net.Uri")
+        JavaFile = autoclass("java.io.File")
+        for path in file_paths:
             context.sendBroadcast(
-                intent(
-                    intent.ACTION_MEDIA_SCANNER_SCAN_FILE,
-                    uri.fromFile(java_file(path)),
+                Intent(
+                    Intent.ACTION_MEDIA_SCANNER_SCAN_FILE,
+                    Uri.fromFile(JavaFile(path)),
                 )
             )
         return True
     except Exception:
         pass
 
+    # ── 3. Shell: per-file scan broadcast ────────────────────────────────────
+    scanned = False
     try:
-        scanned = False
-        for path in scan_targets:
-            result = subprocess.run(
+        for path in file_paths:
+            r = subprocess.run(
                 [
-                    "/system/bin/am",
-                    "broadcast",
-                    "-a",
-                    "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
-                    "-d",
-                    f"file://{quote(path)}",
+                    "/system/bin/am", "broadcast",
+                    "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+                    "-d", f"file://{quote(path)}",
                 ],
                 check=False,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=5,
             )
-            scanned = scanned or result.returncode == 0
-        return scanned
+            scanned = scanned or r.returncode == 0
     except Exception:
-        return False
+        pass
+
+    # ── 4. Shell: directory-level ACTION_MEDIA_CHANGED (modern Android) ───────
+    # This is what the File Manager triggers — it signals that a directory
+    # changed and forces apps like WhatsApp/TikTok/Instagram to re-query.
+    try:
+        for d in dir_paths:
+            subprocess.run(
+                [
+                    "/system/bin/am", "broadcast",
+                    "-a", "android.intent.action.MEDIA_CHANGED",
+                    "-d", f"file://{quote(d)}",
+                ],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+    except Exception:
+        pass
+
+    # ── 5. Shell: touch files so mtime changes, then re-broadcast ─────────────
+    # Some devices only re-scan when the file's mtime is newer than the DB entry.
+    try:
+        now = time.time()
+        for path in file_paths:
+            os.utime(path, (now, now))
+        for path in file_paths:
+            subprocess.run(
+                [
+                    "/system/bin/am", "broadcast",
+                    "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+                    "-d", f"file://{quote(path)}",
+                ],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+    except Exception:
+        pass
+
+    return scanned
 
 
 def register_android_media_store(paths: list[str]) -> bool:
@@ -189,6 +234,7 @@ def register_android_media_store(paths: list[str]) -> bool:
 
         registered = False
         now = int(time.time())
+        now_ms = now * 1000
         for path in file_paths:
             values = content_values()
             name = os.path.basename(path)
@@ -203,6 +249,7 @@ def register_android_media_store(paths: list[str]) -> bool:
             values.put("mime_type", mime_type)
             values.put("date_added", now)
             values.put("date_modified", modified)
+            values.put("datetaken", now_ms)
             values.put("_size", size)
             if build_version.SDK_INT >= 29:
                 values.put("relative_path", "Movies/VidSaver/")
@@ -214,6 +261,17 @@ def register_android_media_store(paths: list[str]) -> bool:
         return registered
     except Exception:
         return False
+
+
+def mark_files_recent(paths: list[str]) -> None:
+    """Make Android media pickers sort newly downloaded files as recent."""
+    now = time.time()
+    for path in paths:
+        if path and os.path.isfile(path):
+            try:
+                os.utime(path, (now, now))
+            except Exception:
+                pass
 
 
 def collect_downloaded_paths(info) -> list[str]:
@@ -283,6 +341,10 @@ def run_download(url: str, target_dir: str, cookie_path: str,
         'outtmpl':    os.path.join(target_dir, '%(title).80s [%(id)s].%(ext)s'),
         'progress_hooks': [_hook],
         'cookiefile': cookie_path,
+
+        # Keep downloaded videos sorted as new/recent media on Android. yt-dlp
+        # can otherwise preserve old server timestamps from the source file.
+        'updatetime': False,
 
         # Simpler format string resolves faster (fewer format comparisons)
         'format': 'b[ext=mp4]/b',
@@ -368,6 +430,7 @@ def run_download(url: str, target_dir: str, cookie_path: str,
             save_metadata(metadata_path, meta)
 
             new_paths = [os.path.join(target_dir, fname) for fname in saved_files]
+            mark_files_recent(new_paths)
             media_registered = register_android_media_store(new_paths)
             scan_started = scan_android_media(new_paths)
             if schedule_media_scan_later:
