@@ -2,6 +2,8 @@
 
 Vidsaver is a Flet-based video downloader for saving videos from supported social/video platforms to the device. It uses `yt-dlp` for download handling and provides a simple mobile/desktop UI for pasting a link, downloading, viewing saved videos, and deleting downloads.
 
+**Download TikTok and Instagram reels without watermark in Full HD**
+
 ## Features
 
 - Download videos from common video URLs supported by `yt-dlp`.
@@ -18,6 +20,15 @@ Vidsaver is a Flet-based video downloader for saving videos from supported socia
   Vidsaver-vX.Y.Z-Windows.zip
   Vidsaver-vX.Y.Z-Android-arm64-v8a.apk
   ```
+### Mobile Demo
+
+![Demo](/src/assets/demo.jpg)
+
+### Windows Demo
+
+![Demo](/src/assets/demo1.png)
+![Demo](/src/assets/demo2.png)
+![Demo](/src/assets/demo3.png)
 
 ## Tech Stack
 

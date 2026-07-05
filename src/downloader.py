@@ -10,6 +10,8 @@ import json
 import sys
 import mimetypes
 import subprocess
+import threading
+import time
 from datetime import datetime
 from urllib.parse import quote
 
@@ -97,8 +99,15 @@ def scan_android_media(paths: list[str]) -> bool:
     Ask Android to index newly saved media files so they appear in Gallery
     and video player apps without waiting for a device-wide media scan.
     """
-    paths = [path for path in paths if path and os.path.exists(path)]
-    if not paths or not os.path.exists("/storage/emulated/0"):
+    file_paths = [path for path in paths if path and os.path.isfile(path)]
+    dir_paths = sorted({
+        os.path.dirname(path)
+        for path in file_paths
+        if os.path.isdir(os.path.dirname(path))
+    })
+    scan_targets = file_paths + dir_paths
+
+    if not file_paths or not os.path.exists("/storage/emulated/0"):
         return False
 
     try:
@@ -110,9 +119,9 @@ def scan_android_media(paths: list[str]) -> bool:
         media_scanner = autoclass("android.media.MediaScannerConnection")
         mime_types = [
             mimetypes.guess_type(path)[0] or "video/*"
-            for path in paths
+            for path in file_paths
         ]
-        media_scanner.scanFile(context, paths, mime_types, None)
+        media_scanner.scanFile(context, file_paths, mime_types, None)
         return True
     except Exception:
         pass
@@ -126,7 +135,7 @@ def scan_android_media(paths: list[str]) -> bool:
         uri = autoclass("android.net.Uri")
         java_file = autoclass("java.io.File")
 
-        for path in paths:
+        for path in scan_targets:
             context.sendBroadcast(
                 intent(
                     intent.ACTION_MEDIA_SCANNER_SCAN_FILE,
@@ -138,8 +147,9 @@ def scan_android_media(paths: list[str]) -> bool:
         pass
 
     try:
-        for path in paths:
-            subprocess.run(
+        scanned = False
+        for path in scan_targets:
+            result = subprocess.run(
                 [
                     "/system/bin/am",
                     "broadcast",
@@ -153,9 +163,31 @@ def scan_android_media(paths: list[str]) -> bool:
                 stderr=subprocess.DEVNULL,
                 timeout=5,
             )
-        return True
+            scanned = scanned or result.returncode == 0
+        return scanned
     except Exception:
         return False
+
+
+def scan_android_media_later(paths: list[str],
+                             delays: tuple[int, ...] = (2, 8, 20)) -> None:
+    """
+    Some Android file managers and social apps update MediaStore lazily.
+    Re-scan after the file handle has fully settled so other apps see it.
+    """
+    if not os.path.exists("/storage/emulated/0"):
+        return
+
+    file_paths = [path for path in paths if path and os.path.isfile(path)]
+    if not file_paths:
+        return
+
+    def worker():
+        for delay in delays:
+            time.sleep(delay)
+            scan_android_media(file_paths)
+
+    threading.Thread(target=worker, daemon=True).start()
 
 
 def collect_downloaded_paths(info) -> list[str]:
@@ -309,10 +341,12 @@ def run_download(url: str, target_dir: str, cookie_path: str,
             save_metadata(metadata_path, meta)
 
             new_paths = [os.path.join(target_dir, fname) for fname in saved_files]
-            if scan_android_media(new_paths):
+            scan_started = scan_android_media(new_paths)
+            scan_android_media_later(new_paths)
+            if scan_started:
                 on_status("Video saved and added to Gallery.")
             else:
-                on_status("Video saved successfully.")
+                on_status("Video saved. Gallery may update shortly.")
         else:
             on_error(
                 "No video file was saved. Instagram may require fresh cookies, "
