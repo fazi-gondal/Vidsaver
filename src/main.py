@@ -94,7 +94,8 @@ def scan_existing_downloads(page: ft.Page):
             for name in os.listdir(directory)
             if name.lower().endswith(VIDEO_EXTENSIONS)
         ]
-        from downloader import scan_android_media
+        from downloader import scan_android_media, register_android_media_store
+        register_android_media_store(paths)
         scan_android_media(paths)
     except Exception:
         pass
@@ -105,13 +106,14 @@ def schedule_media_scan_later(page: ft.Page, paths: list[str]):
         return
 
     async def delayed_scan():
-        from downloader import mark_files_recent, scan_android_media
+        from downloader import mark_files_recent, scan_android_media, register_android_media_store
         for delay in (2, 8, 20):
             await asyncio.sleep(delay)
+            await asyncio.to_thread(register_android_media_store, paths)
             await asyncio.to_thread(mark_files_recent, paths)
             await asyncio.to_thread(scan_android_media, paths)
 
-    asyncio.create_task(delayed_scan())
+    page._loop.call_soon_threadsafe(lambda: page._loop.create_task(delayed_scan()))
 
 
 @ft.component
@@ -221,13 +223,25 @@ def App(page: ft.Page):
     refresh_trigger, set_refresh_trigger = ft.use_state(0)
     scroll_offset, set_scroll_offset = ft.use_state(0)
 
-    # Sync Page UI (AppBar visibility) reactively
+    # Sync Page UI (AppBar & NavigationBar) reactively
     def sync_page_ui():
         if page.appbar:
             page.appbar.visible = not playing_file
+        
+        if playing_file:
+            page.navigation_bar = None
+        else:
+            page.navigation_bar = ft.NavigationBar(
+                selected_index=active_tab,
+                on_change=lambda e: set_active_tab(e.control.selected_index),
+                destinations=[
+                    ft.NavigationBarDestination(icon=ft.Icons.HOME, label="Home"),
+                    ft.NavigationBarDestination(icon=ft.Icons.DOWNLOAD, label="Downloads"),
+                ],
+            )
         page.update()
 
-    ft.use_effect(sync_page_ui, dependencies=[playing_file])
+    ft.use_effect(sync_page_ui, dependencies=[playing_file, active_tab])
 
     # Scan existing files on mount
     def on_mounted_action():
@@ -277,40 +291,42 @@ def App(page: ft.Page):
 
             def on_status(message):
                 if message.startswith("Downloading:"):
-                    set_status_text("Downloading video...")
+                    page._loop.call_soon_threadsafe(lambda: set_status_text("Downloading video..."))
                 else:
-                    set_status_text(message)
+                    page._loop.call_soon_threadsafe(lambda: set_status_text(message))
                 if message in (
                     "Video saved and added to Gallery.",
                     "Video saved successfully.",
                     "Video saved. Gallery may update shortly.",
                 ):
                     is_done[0] = True
-                    set_download_completed(True)
+                    page._loop.call_soon_threadsafe(lambda: set_download_completed(True))
 
             def on_progress(value):
-                set_progress_val(value)
+                page._loop.call_soon_threadsafe(lambda: set_progress_val(value))
 
             def on_error(message):
                 is_done[0] = False
-                set_download_completed(False)
-                set_status_text(f"Error: {message}")
+                page._loop.call_soon_threadsafe(lambda: set_download_completed(False))
+                page._loop.call_soon_threadsafe(lambda: set_status_text(f"Error: {message}"))
 
             def on_finish():
-                set_progress_visible(False)
-                set_download_disabled(False)
-                set_refresh_trigger(lambda prev: prev + 1)
+                page._loop.call_soon_threadsafe(lambda: set_progress_visible(False))
+                page._loop.call_soon_threadsafe(lambda: set_download_disabled(False))
+                page._loop.call_soon_threadsafe(lambda: set_refresh_trigger(lambda prev: prev + 1))
                 if is_done[0]:
-                    page.overlay.append(
-                        ft.SnackBar(
-                            content=ft.Text("Video download complete"),
-                            open=True,
-                            duration=2500,
-                            behavior=ft.SnackBarBehavior.FLOATING,
-                            margin=ft.Margin(left=16, top=0, right=16, bottom=10),
+                    def show_snackbar():
+                        page.overlay.append(
+                            ft.SnackBar(
+                                content=ft.Text("Video download complete"),
+                                open=True,
+                                duration=2500,
+                                behavior=ft.SnackBarBehavior.FLOATING,
+                                margin=ft.Margin(left=16, top=0, right=16, bottom=10),
+                            )
                         )
-                    )
-                    page.update()
+                        page.update()
+                    page._loop.call_soon_threadsafe(show_snackbar)
 
             # Pass a dummy page object to prevent background thread update conflicts
             class DummyPage:
@@ -363,28 +379,11 @@ def App(page: ft.Page):
             refresh_trigger=refresh_trigger
         )
 
-    return ft.SafeArea(
-        content=ft.Column(
-            controls=[
-                ft.Container(content=content_view, expand=True),
-                ft.NavigationBar(
-                    selected_index=active_tab,
-                    visible=not playing_file,
-                    on_change=lambda e: set_active_tab(e.control.selected_index),
-                    destinations=[
-                        ft.NavigationBarDestination(icon=ft.Icons.HOME, label="Home"),
-                        ft.NavigationBarDestination(icon=ft.Icons.DOWNLOAD, label="Downloads"),
-                    ],
-                )
-            ],
-            spacing=0,
-            expand=True
-        ),
-        expand=True
-    )
+    return ft.SafeArea(content=content_view, expand=True)
 
 
 async def main(page: ft.Page):
+    page._loop = asyncio.get_running_loop()
     page.title = "Vidsaver"
     page.padding = 0
     page.spacing = 0

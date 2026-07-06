@@ -1,6 +1,6 @@
 [project]
 name = "vidsaver"
-version = "1.1.8"
+version = "1.1.9"
 description = ""
 readme = "README.md"
 requires-python = ">=3.14"

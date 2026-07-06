@@ -101,6 +101,8 @@ def get_android_context():
     """
     import os
     try:
+        import jnius
+        jnius.attach_thread()  # Ensure the background thread is attached to JVM
         from jnius import autoclass
     except ImportError:
         return None
@@ -252,27 +254,30 @@ def register_android_media_store(paths: list[str]) -> bool:
         now = int(time.time())
         now_ms = now * 1000
         for path in file_paths:
-            values = content_values()
-            name = os.path.basename(path)
-            title, _ = os.path.splitext(name)
-            mime_type = mimetypes.guess_type(path)[0] or "video/mp4"
-            modified = int(os.path.getmtime(path))
-            size = int(os.path.getsize(path))
+            try:
+                values = content_values()
+                name = os.path.basename(path)
+                title, _ = os.path.splitext(name)
+                mime_type = mimetypes.guess_type(path)[0] or "video/mp4"
+                modified = int(os.path.getmtime(path))
+                size = int(os.path.getsize(path))
 
-            values.put("_data", path)
-            values.put("_display_name", name)
-            values.put("title", title)
-            values.put("mime_type", mime_type)
-            values.put("date_added", now)
-            values.put("date_modified", modified)
-            values.put("datetaken", now_ms)
-            values.put("_size", size)
-            if build_version.SDK_INT >= 29:
-                values.put("relative_path", "Movies/VidSaver/")
-                values.put("is_pending", 0)
+                values.put("_data", path)
+                values.put("_display_name", name)
+                values.put("title", title)
+                values.put("mime_type", mime_type)
+                values.put("date_added", now)
+                values.put("date_modified", modified)
+                values.put("datetaken", now_ms)
+                values.put("_size", size)
+                if build_version.SDK_INT >= 29:
+                    values.put("relative_path", "Movies/VidSaver/")
+                    values.put("is_pending", 0)
 
-            uri = resolver.insert(media_store_video.EXTERNAL_CONTENT_URI, values)
-            registered = registered or uri is not None
+                uri = resolver.insert(media_store_video.EXTERNAL_CONTENT_URI, values)
+                registered = registered or uri is not None
+            except Exception:
+                pass
 
         return registered
     except Exception:
