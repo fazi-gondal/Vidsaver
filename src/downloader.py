@@ -152,13 +152,6 @@ def scan_android_media(paths: list[str]) -> bool:
     and video player apps without waiting for a device-wide media scan.
     """
     file_paths = [path for path in paths if path and os.path.isfile(path)]
-    dir_paths = sorted({
-        os.path.dirname(path)
-        for path in file_paths
-        if os.path.isdir(os.path.dirname(path))
-    })
-    scan_targets = file_paths + dir_paths
-
     if not file_paths or not os.path.exists("/storage/emulated/0"):
         return False
 
@@ -166,68 +159,68 @@ def scan_android_media(paths: list[str]) -> bool:
     if not context:
         return False
 
-    # Try static MediaScannerConnection.scanFile (batch)
+    scanned = False
+
+    # 1. Try static MediaScannerConnection.scanFile (batch)
     try:
         from jnius import autoclass
         media_scanner = autoclass("android.media.MediaScannerConnection")
-        mime_types = [
-            mimetypes.guess_type(path)[0] or "video/mp4"
-            for path in file_paths
-        ]
-        media_scanner.scanFile(context, file_paths, mime_types, None)
-        return True
+        # Pass None for mimeTypes to let Android auto-detect type safely
+        media_scanner.scanFile(context, file_paths, None, None)
+        scanned = True
     except Exception:
         # Fallback to scanning files individually if batch fails
-        try:
-            from jnius import autoclass
-            media_scanner = autoclass("android.media.MediaScannerConnection")
-            for path in file_paths:
-                mime = mimetypes.guess_type(path)[0] or "video/mp4"
-                media_scanner.scanFile(context, [path], [mime], None)
-            return True
-        except Exception:
-            pass
+        for path in file_paths:
+            try:
+                media_scanner.scanFile(context, [path], None, None)
+                scanned = True
+            except Exception:
+                pass
 
-    # Try Intent broadcast fallback
+    # 2. Try Intent broadcast fallback (with setter calls to avoid constructor overload issues)
     try:
         from jnius import autoclass
-        intent = autoclass("android.content.Intent")
-        uri = autoclass("android.net.Uri")
-        java_file = autoclass("java.io.File")
+        intent_class = autoclass("android.content.Intent")
+        uri_class = autoclass("android.net.Uri")
+        java_file_class = autoclass("java.io.File")
 
-        for path in scan_targets:
-            context.sendBroadcast(
-                intent(
-                    intent.ACTION_MEDIA_SCANNER_SCAN_FILE,
-                    uri.fromFile(java_file(path)),
-                )
-            )
-        return True
+        for path in file_paths:
+            try:
+                intent_obj = intent_class()
+                intent_obj.setAction(intent_class.ACTION_MEDIA_SCANNER_SCAN_FILE)
+                intent_obj.setData(uri_class.fromFile(java_file_class(path)))
+                context.sendBroadcast(intent_obj)
+                scanned = True
+            except Exception:
+                pass
     except Exception:
         pass
 
-    # Try subprocess fallback
+    # 3. Try subprocess fallback
     try:
-        scanned = False
-        for path in scan_targets:
-            result = subprocess.run(
-                [
-                    "/system/bin/am",
-                    "broadcast",
-                    "-a",
-                    "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
-                    "-d",
-                    f"file://{quote(path)}",
-                ],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=5,
-            )
-            scanned = scanned or result.returncode == 0
-        return scanned
+        for path in file_paths:
+            try:
+                result = subprocess.run(
+                    [
+                        "/system/bin/am",
+                        "broadcast",
+                        "-a",
+                        "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+                        "-d",
+                        f"file://{quote(path)}",
+                    ],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=5,
+                )
+                scanned = scanned or result.returncode == 0
+            except Exception:
+                pass
     except Exception:
-        return False
+        pass
+
+    return scanned
 
 
 def register_android_media_store(paths: list[str]) -> bool:
@@ -271,7 +264,7 @@ def register_android_media_store(paths: list[str]) -> bool:
                 values.put("datetaken", now_ms)
                 values.put("_size", size)
                 if build_version.SDK_INT >= 29:
-                    values.put("relative_path", "Movies/VidSaver/")
+                    values.put("relative_path", "Download/VidSaver/")
                     values.put("is_pending", 0)
 
                 uri = resolver.insert(media_store_video.EXTERNAL_CONTENT_URI, values)

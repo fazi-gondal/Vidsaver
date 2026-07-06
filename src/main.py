@@ -32,7 +32,7 @@ def ensure_storage_paths(page: ft.Page):
 
     is_android = os.path.exists(ANDROID_STORAGE_ROOT)
     if is_android:
-        download_dir = os.path.join(ANDROID_STORAGE_ROOT, "Movies", "VidSaver")
+        download_dir = os.path.join(ANDROID_STORAGE_ROOT, "Download", "VidSaver")
     else:
         download_dir = (
             os.path.join(os.environ["USERPROFILE"], "Downloads")
@@ -40,7 +40,7 @@ def ensure_storage_paths(page: ft.Page):
         )
 
     os.makedirs(download_dir, exist_ok=True)
-    metadata_path = os.path.join(download_dir, ".metadata.json")
+    metadata_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "metadata.json")
     
     page._download_dir = download_dir
     page._metadata_path = metadata_path
@@ -133,7 +133,7 @@ def HomeView(
 
     async def try_paste_clipboard():
         try:
-            clip = await page.Clipboard().get()
+            clip = await ft.Clipboard().get()
             if clip and is_video_url(clip):
                 if clip.strip() != url.strip():
                     set_url(clip.strip())
@@ -190,7 +190,7 @@ def HomeView(
                     border_radius=4,
                 ),
                 ft.Text(value=status_text_val, color=ft.Colors.BLUE_GREY, size=12),
-                ft.Container(expand=True),
+                ft.Container(height=40),
                 ft.Text(
                     "Vidsaver made with ❤️ by Fazi Gondal",
                     size=16,
@@ -200,6 +200,7 @@ def HomeView(
             ],
             spacing=12,
             horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+            scroll=ft.ScrollMode.ADAPTIVE,
         ),
         padding=ft.Padding(left=24, right=24, top=24, bottom=24),
         expand=True,
@@ -384,6 +385,56 @@ def App(page: ft.Page):
 
 async def main(page: ft.Page):
     page._loop = asyncio.get_running_loop()
+    
+    # Pre-initialize and cache storage paths asynchronously using Flet's StoragePaths service
+    try:
+        storage_paths = ft.StoragePaths()
+        downloads_dir = await storage_paths.get_downloads_directory()
+        if downloads_dir:
+            download_dir = os.path.join(downloads_dir, "VidSaver")
+        else:
+            download_dir = "./downloads"
+    except Exception:
+        # Fallback if unsupported or fails
+        is_android = os.path.exists(ANDROID_STORAGE_ROOT)
+        if is_android:
+            download_dir = os.path.join(ANDROID_STORAGE_ROOT, "Download", "VidSaver")
+        else:
+            download_dir = (
+                os.path.join(os.environ["USERPROFILE"], "Downloads")
+                if "USERPROFILE" in os.environ else "./downloads"
+            )
+
+    os.makedirs(download_dir, exist_ok=True)
+    metadata_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "metadata.json")
+    
+    # Cache on page
+    page._download_dir = download_dir
+    page._metadata_path = metadata_path
+
+    # Trigger migrations from old Movies directory
+    is_android = os.path.exists(ANDROID_STORAGE_ROOT)
+    if is_android:
+        old_dir = os.path.join(ANDROID_STORAGE_ROOT, "Movies", "VidSaver")
+        if os.path.exists(old_dir):
+            old_metadata = os.path.join(old_dir, ".metadata.json")
+            if os.path.exists(old_metadata) and not os.path.exists(metadata_path):
+                try:
+                    import shutil
+                    shutil.copy2(old_metadata, metadata_path)
+                except Exception:
+                    pass
+            try:
+                for f in os.listdir(old_dir):
+                    if f.lower().endswith(VIDEO_EXTENSIONS):
+                        old_file = os.path.join(old_dir, f)
+                        new_file = os.path.join(download_dir, f)
+                        if os.path.exists(old_file) and not os.path.exists(new_file):
+                            import shutil
+                            shutil.move(old_file, new_file)
+            except Exception:
+                pass
+
     page.title = "Vidsaver"
     page.padding = 0
     page.spacing = 0

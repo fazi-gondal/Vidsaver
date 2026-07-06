@@ -116,7 +116,7 @@ def LibraryView(download_dir: str, metadata_path: str, on_play, initial_scroll=0
         try:
             loaded_files = [
                 f for f in os.listdir(download_dir)
-                if f.lower().endswith(VIDEO_EXTENSIONS)
+                if f.lower().endswith(VIDEO_EXTENSIONS) and f in loaded_meta
             ]
             loaded_files.sort(
                 key=lambda x: os.path.getmtime(os.path.join(download_dir, x)),
