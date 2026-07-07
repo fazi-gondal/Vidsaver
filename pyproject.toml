@@ -1,6 +1,6 @@
 [project]
 name = "vidsaver"
-version = "1.2.1"
+version = "1.2.2"
 description = ""
 readme = "README.md"
 requires-python = ">=3.14"
@@ -11,6 +11,7 @@ dependencies = [
     "flet==0.85.3",
     "flet-video==0.85.3",
     "flet-permission-handler==0.85.3",
+    "flet-media-scanner",
     "yt-dlp",
     "requests",
     "certifi",
@@ -58,3 +59,10 @@ dependencies = [
 "android.permission.READ_EXTERNAL_STORAGE" = true
 "android.permission.WRITE_EXTERNAL_STORAGE" = true
 "android.permission.INTERNET" = true
+
+[tool.flet.extensions]
+flet_media_scanner = "flet_media_scanner.Extension"
+
+[tool.uv.sources]
+flet-media-scanner = { path = "packages/flet-media-scanner", editable = true }
+

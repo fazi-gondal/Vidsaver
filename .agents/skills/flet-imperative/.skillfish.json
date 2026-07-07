@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "flet-imperative",
+  "owner": "brunobrown",
+  "repo": "claude-flet-plugin",
+  "path": ".agents/skills/flet-imperative",
+  "branch": "main",
+  "sha": "5ebf5c883d2d480b6aaa6d09c90a84f8f22719f1",
+  "source": "manual"
+}

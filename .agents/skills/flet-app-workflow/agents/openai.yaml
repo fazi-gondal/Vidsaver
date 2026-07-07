@@ -1,0 +1,11 @@
+interface:
+  display_name: "Flet App Workflow"
+  short_description: "Guided workflow to build a Flet declarative app from scratch."
+  brand_color: "#38BDF8"
+  default_prompt: |
+    Run a guided, phased workflow to design and implement a Flet declarative app.
+    Start by clarifying requirements and target platforms, then scaffold, implement pages/components,
+    wire state/services, and finish with polish/testing steps.
+policy:
+  allow_implicit_invocation: true
+

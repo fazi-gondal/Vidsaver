@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "flet-app-workflow",
+  "owner": "brunobrown",
+  "repo": "claude-flet-plugin",
+  "path": ".agents/skills/flet-app-workflow",
+  "branch": "main",
+  "sha": "b062275d81fa957f578a7a2efb630a5794ad4315",
+  "source": "manual"
+}

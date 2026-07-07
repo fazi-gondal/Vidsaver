@@ -1,0 +1,8 @@
+{
+  "python.analysis.extraPaths": [
+    "./packages/flet-media-scanner/src"
+  ],
+  "python.autoComplete.extraPaths": [
+    "./packages/flet-media-scanner/src"
+  ]
+}

@@ -62,6 +62,20 @@ def ensure_permission_handler(page: ft.Page):
     return page._permission_handler, page._permission_module
 
 
+def ensure_media_scanner(page: ft.Page):
+    if not hasattr(page, "_media_scanner"):
+        try:
+            from flet_media_scanner import MediaScanner
+            scanner = MediaScanner()
+            page.services.append(scanner)
+            page._media_scanner = scanner
+            page.update()
+        except Exception:
+            page._media_scanner = None
+    return page._media_scanner
+
+
+
 async def has_storage_access(page: ft.Page) -> bool:
     if not os.path.exists(ANDROID_STORAGE_ROOT):
         return True
@@ -84,7 +98,7 @@ async def request_storage_access(page: ft.Page) -> bool:
     return await has_storage_access(page)
 
 
-def scan_existing_downloads(page: ft.Page):
+async def scan_existing_downloads(page: ft.Page):
     if not os.path.exists(ANDROID_STORAGE_ROOT):
         return
     try:
@@ -94,9 +108,20 @@ def scan_existing_downloads(page: ft.Page):
             for name in os.listdir(directory)
             if name.lower().endswith(VIDEO_EXTENSIONS)
         ]
-        from downloader import scan_android_media, register_android_media_store
-        register_android_media_store(paths)
-        scan_android_media(paths)
+        from downloader import register_android_media_store, mark_files_recent
+        await asyncio.to_thread(register_android_media_store, paths)
+        await asyncio.to_thread(mark_files_recent, paths)
+        
+        scanner = getattr(page, "_media_scanner", None)
+        if scanner:
+            for path in paths:
+                try:
+                    await scanner.scan_media(path)
+                except Exception:
+                    pass
+        else:
+            from downloader import scan_android_media
+            await asyncio.to_thread(scan_android_media, paths)
     except Exception:
         pass
 
@@ -105,15 +130,34 @@ def schedule_media_scan_later(page: ft.Page, paths: list[str]):
     if not os.path.exists(ANDROID_STORAGE_ROOT):
         return
 
-    async def delayed_scan():
-        from downloader import mark_files_recent, scan_android_media, register_android_media_store
+    async def scan_now_and_later():
+        # 1. Immediate scan using Flet extension if available
+        scanner = getattr(page, "_media_scanner", None)
+        if scanner:
+            for path in paths:
+                try:
+                    await scanner.scan_media(path)
+                except Exception:
+                    pass
+
+        # 2. Delayed background scanning/registering retries
+        from downloader import mark_files_recent, register_android_media_store
         for delay in (2, 8, 20):
             await asyncio.sleep(delay)
             await asyncio.to_thread(register_android_media_store, paths)
             await asyncio.to_thread(mark_files_recent, paths)
-            await asyncio.to_thread(scan_android_media, paths)
+            
+            if scanner:
+                for path in paths:
+                    try:
+                        await scanner.scan_media(path)
+                    except Exception:
+                        pass
+            else:
+                from downloader import scan_android_media
+                await asyncio.to_thread(scan_android_media, paths)
 
-    page._loop.call_soon_threadsafe(lambda: page._loop.create_task(delayed_scan()))
+    page._loop.call_soon_threadsafe(lambda: page._loop.create_task(scan_now_and_later()))
 
 
 @ft.component
@@ -248,7 +292,7 @@ def App(page: ft.Page):
     def on_mounted_action():
         async def run_initial_scan():
             await asyncio.sleep(3)
-            await asyncio.to_thread(scan_existing_downloads, page)
+            await scan_existing_downloads(page)
         asyncio.create_task(run_initial_scan())
         
     ft.use_effect(on_mounted_action, dependencies=[])
@@ -411,6 +455,8 @@ async def main(page: ft.Page):
     # Cache on page
     page._download_dir = download_dir
     page._metadata_path = metadata_path
+    
+    ensure_media_scanner(page)
 
     page.title = "Vidsaver"
     page.padding = 0

@@ -1,0 +1,13 @@
+interface:
+  display_name: "Flet Extension"
+  short_description: "Flet extension packages (Service/UI Controls), Python/Dart integration, events, publishing."
+  brand_color: "#22C55E"
+  default_prompt: |
+    Use this skill when creating or reviewing a Flet extension package (Service or UI Control).
+    Priorities:
+    - @ft.control("Name") must match Dart control.type cases
+    - Correct Service vs LayoutControl patterns (page.services.append vs page.add)
+    - Safe Python/Dart type mapping and event wiring (triggerEvent -> on_name handlers)
+policy:
+  allow_implicit_invocation: true
+

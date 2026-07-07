@@ -1,0 +1,15 @@
+[project]
+name = "flet-media-scanner"
+version = "0.85.3"
+description = "Flet extension for Android media scanner"
+requires-python = ">=3.10"
+dependencies = [
+    "flet>=0.85.0"
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+"flutter.flet_media_scanner" = ["**/*"]
