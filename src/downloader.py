@@ -147,12 +147,17 @@ def get_android_context():
     return context
 
 
+_cmd_media_supported = None
+
+
 def scan_android_media(paths: list[str]) -> bool:
     """
     Ask Android to index newly saved media files so they appear in Gallery.
     Uses subprocess commands only — safe to call from any thread (no JNI needed).
     subprocess.run creates a new OS process so thread attachment is irrelevant.
     """
+    global _cmd_media_supported
+
     file_paths = [path for path in paths if path and os.path.isfile(path)]
     if not file_paths or not os.path.exists("/storage/emulated/0"):
         return False
@@ -163,20 +168,24 @@ def scan_android_media(paths: list[str]) -> bool:
         uri = f"file://{path}"
 
         # Method 1: cmd media scan (Android 9+ / API 28+)
-        # Internally calls MediaScannerConnection.scanFile().
-        try:
-            result = subprocess.run(
-                ["/system/bin/cmd", "media", "scan", uri],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=8,
-            )
-            if result.returncode == 0:
-                scanned = True
-                continue
-        except Exception:
-            pass
+        if _cmd_media_supported is not False:
+            try:
+                result = subprocess.run(
+                    ["/system/bin/cmd", "media", "scan", uri],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    timeout=8,
+                )
+                stderr_text = result.stderr.decode('utf-8', errors='ignore') if result.stderr else ""
+                if result.returncode == 0:
+                    scanned = True
+                    _cmd_media_supported = True
+                    continue
+                else:
+                    if "Can't find service" in stderr_text or "not found" in stderr_text:
+                        _cmd_media_supported = False
+            except Exception:
+                _cmd_media_supported = False
 
         # Method 2: am broadcast with new media provider package (Android 10+)
         try:
@@ -216,6 +225,7 @@ def scan_android_media(paths: list[str]) -> bool:
             pass
 
     return scanned
+
 
 
 def register_android_media_store(paths: list[str]) -> bool:

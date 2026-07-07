@@ -11,5 +11,9 @@ dependencies = [
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["flet_media_scanner", "flutter.flet_media_scanner"]
+
 [tool.setuptools.package-data]
 "flutter.flet_media_scanner" = ["**/*"]

@@ -141,12 +141,17 @@ async def scan_existing_downloads(page: ft.Page):
         print(f"[VidSaver] scan_existing_downloads error: {e}")
 
 
+_cmd_media_supported = None
+
+
 async def _try_scan_subprocess(path: str) -> bool:
     """
     Trigger Android MediaScannerConnection via shell commands.
     Runs on the asyncio event loop — no JNI thread attachment needed.
     Tries multiple methods for maximum Android version compatibility.
     """
+    global _cmd_media_supported
+
     if not os.path.exists(path):
         print(f"[VidSaver] _try_scan_subprocess: file not found: {path}")
         return False
@@ -154,23 +159,31 @@ async def _try_scan_subprocess(path: str) -> bool:
     uri = f"file://{path}"
 
     # Method 1: cmd media scan (Android 9+ / API 28+)
-    # This calls MediaScannerConnection.scanFile() internally.
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "/system/bin/cmd", "media", "scan", uri,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
+    if _cmd_media_supported is not False:
         try:
-            await asyncio.wait_for(proc.wait(), timeout=8.0)
-            if proc.returncode == 0:
-                print(f"[VidSaver] cmd-scan OK: {path}")
-                return True
-        except asyncio.TimeoutError:
-            try: proc.kill()
-            except Exception: pass
-    except Exception as e:
-        print(f"[VidSaver] cmd-scan error: {e}")
+            proc = await asyncio.create_subprocess_exec(
+                "/system/bin/cmd", "media", "scan", uri,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout_data, stderr_data = await asyncio.wait_for(proc.communicate(), timeout=8.0)
+                stderr_text = stderr_data.decode('utf-8', errors='ignore') if stderr_data else ""
+                
+                if proc.returncode == 0:
+                    print(f"[VidSaver] cmd-scan OK: {path}")
+                    _cmd_media_supported = True
+                    return True
+                else:
+                    print(f"[VidSaver] cmd-scan failed (code {proc.returncode}): {stderr_text.strip()}")
+                    if "Can't find service" in stderr_text or "not found" in stderr_text:
+                        _cmd_media_supported = False
+            except asyncio.TimeoutError:
+                try: proc.kill()
+                except Exception: pass
+        except Exception as e:
+            print(f"[VidSaver] cmd-scan error: {e}")
+            _cmd_media_supported = False
 
     # Method 2: am broadcast with new media provider (Android 10+)
     try:
