@@ -24,6 +24,7 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
 android {
+    namespace "com.example.flet_media_scanner"
     compileSdkVersion 33
 
     compileOptions {
