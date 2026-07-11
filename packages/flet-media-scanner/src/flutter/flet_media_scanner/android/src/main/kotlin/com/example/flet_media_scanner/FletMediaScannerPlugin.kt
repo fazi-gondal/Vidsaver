@@ -1,5 +1,6 @@
 package com.example.flet_media_scanner
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
@@ -40,6 +41,8 @@ class FletMediaScannerPlugin : FlutterPlugin, MethodCallHandler {
     override fun onMethodCall(call: MethodCall, result: Result) {
         when (call.method) {
             "saveVideo" -> saveVideo(call, result)
+            "deleteVideo" -> deleteVideo(call, result)
+            "listVideos" -> listVideos(call, result)
             else -> result.notImplemented()
         }
     }
@@ -129,6 +132,121 @@ class FletMediaScannerPlugin : FlutterPlugin, MethodCallHandler {
                 }
             }
             result.error("SAVE_ERROR", e.message, e.toString())
+        }
+    }
+
+    private fun deleteVideo(call: MethodCall, result: Result) {
+        val contentUri = call.argument<String>("contentUri")
+        if (contentUri.isNullOrBlank()) {
+            result.error("INVALID_ARGUMENT", "contentUri must not be null or empty", null)
+            return
+        }
+
+        try {
+            val uri = Uri.parse(contentUri)
+            val deletedRows = context.contentResolver.delete(uri, null, null)
+            result.success(
+                mapOf(
+                    "success" to (deletedRows > 0),
+                    "content_uri" to contentUri,
+                    "deleted_rows" to deletedRows,
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteVideo: exception: ${e.message}", e)
+            result.error("DELETE_ERROR", e.message, e.toString())
+        }
+    }
+
+    private fun listVideos(call: MethodCall, result: Result) {
+        val album = call.argument<String>("album")
+            ?.trim()
+            ?.trim('/')
+            ?.takeIf { it.isNotBlank() }
+            ?: "Vidsaver"
+        val resolver = context.contentResolver
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        }
+
+        val projection = mutableListOf(
+            MediaStore.Video.Media._ID,
+            MediaStore.Video.Media.DISPLAY_NAME,
+            MediaStore.Video.Media.MIME_TYPE,
+            MediaStore.Video.Media.SIZE,
+            MediaStore.Video.Media.DATE_ADDED,
+            MediaStore.Video.Media.DATE_MODIFIED,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            projection.add(MediaStore.Video.Media.RELATIVE_PATH)
+        }
+
+        val selection: String?
+        val selectionArgs: Array<String>?
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            selection = "${MediaStore.Video.Media.RELATIVE_PATH} LIKE ?"
+            selectionArgs = arrayOf("${Environment.DIRECTORY_MOVIES}/$album%")
+        } else {
+            selection = null
+            selectionArgs = null
+        }
+
+        val videos = mutableListOf<Map<String, Any?>>()
+        try {
+            resolver.query(
+                collection,
+                projection.toTypedArray(),
+                selection,
+                selectionArgs,
+                "${MediaStore.Video.Media.DATE_ADDED} DESC"
+            )?.use { cursor ->
+                val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+                val mimeIndex = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.MIME_TYPE)
+                val sizeIndex = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+                val addedIndex = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+                val modifiedIndex = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_MODIFIED)
+                val relativePathIndex = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    cursor.getColumnIndex(MediaStore.Video.Media.RELATIVE_PATH)
+                } else {
+                    -1
+                }
+
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idIndex)
+                    val uri = ContentUris.withAppendedId(collection, id)
+                    val displayName = cursor.getString(nameIndex) ?: continue
+                    val relativePath = if (relativePathIndex >= 0) {
+                        cursor.getString(relativePathIndex) ?: ""
+                    } else {
+                        "${Environment.DIRECTORY_MOVIES}/$album"
+                    }
+
+                    videos.add(
+                        mapOf(
+                            "content_uri" to uri.toString(),
+                            "display_name" to displayName,
+                            "mime_type" to (cursor.getString(mimeIndex) ?: "video/mp4"),
+                            "relative_path" to relativePath.trimEnd('/'),
+                            "size" to cursor.getLong(sizeIndex),
+                            "date_added" to cursor.getLong(addedIndex),
+                            "date_modified" to cursor.getLong(modifiedIndex),
+                        )
+                    )
+                }
+            }
+
+            result.success(
+                mapOf(
+                    "success" to true,
+                    "videos" to videos,
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "listVideos: exception: ${e.message}", e)
+            result.error("LIST_ERROR", e.message, e.toString())
         }
     }
 }

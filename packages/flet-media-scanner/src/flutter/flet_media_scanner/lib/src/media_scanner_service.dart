@@ -29,6 +29,8 @@ class MediaScannerService extends FletService {
 
     return switch (methodName) {
       "save_video" => await _saveVideo(arguments),
+      "delete_video" => await _deleteVideo(arguments),
+      "list_videos" => await _listVideos(arguments),
       "scan_media" => await _scanMedia(arguments),
       _ => throw Exception("MediaScannerService: unknown method '$methodName'"),
     };
@@ -107,6 +109,68 @@ class MediaScannerService extends FletService {
         "error": error.toString(),
       });
       return "false";
+    }
+  }
+
+  Future<String> _deleteVideo(Map<String, dynamic> args) async {
+    final String? contentUri = args["content_uri"] as String?;
+    if (contentUri == null || contentUri.isEmpty) {
+      return _encodeResult({
+        "success": false,
+        "error": "content_uri is required",
+      });
+    }
+
+    try {
+      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        'deleteVideo',
+        {'contentUri': contentUri},
+      );
+      final payload = Map<String, dynamic>.from(result ?? {});
+      control.triggerEvent("deleted", payload);
+      return _encodeResult(payload);
+    } on PlatformException catch (e) {
+      final payload = {
+        "success": false,
+        "content_uri": contentUri,
+        "error": "${e.code}: ${e.message}",
+      };
+      control.triggerEvent("deleted", payload);
+      return _encodeResult(payload);
+    } catch (error, stack) {
+      debugPrint("MediaScannerService._deleteVideo: ERROR '$contentUri': $error\n$stack");
+      final payload = {
+        "success": false,
+        "content_uri": contentUri,
+        "error": error.toString(),
+      };
+      control.triggerEvent("deleted", payload);
+      return _encodeResult(payload);
+    }
+  }
+
+  Future<String> _listVideos(Map<String, dynamic> args) async {
+    final String album = args["album"] as String? ?? "Vidsaver";
+
+    try {
+      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        'listVideos',
+        {'album': album},
+      );
+      return _encodeResult(Map<String, dynamic>.from(result ?? {}));
+    } on PlatformException catch (e) {
+      return _encodeResult({
+        "success": false,
+        "videos": [],
+        "error": "${e.code}: ${e.message}",
+      });
+    } catch (error, stack) {
+      debugPrint("MediaScannerService._listVideos: ERROR '$album': $error\n$stack");
+      return _encodeResult({
+        "success": false,
+        "videos": [],
+        "error": error.toString(),
+      });
     }
   }
 

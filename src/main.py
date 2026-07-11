@@ -3,8 +3,10 @@ main.py - Vidsaver app entry point.
 """
 
 import asyncio
+from datetime import datetime
 import os
 import tempfile
+import time
 
 import flet as ft
 
@@ -60,6 +62,38 @@ def ensure_storage_paths(page: ft.Page):
     return download_dir, metadata_path
 
 
+async def init_storage_paths(page: ft.Page):
+    """Initialize stable metadata and temporary staging paths."""
+    if getattr(page, "_download_dir", None):
+        return page._download_dir, page._metadata_path
+
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    if is_android_page(page):
+        try:
+            support_dir = await page.storage_paths.get_application_support_directory()
+        except Exception:
+            support_dir = app_dir
+        try:
+            temp_dir = await page.storage_paths.get_temporary_directory()
+        except Exception:
+            temp_dir = tempfile.gettempdir()
+        metadata_path = os.path.join(support_dir, "metadata.json")
+        download_dir = os.path.join(temp_dir, "vidsaver-staging")
+    else:
+        metadata_path = os.path.join(app_dir, "metadata.json")
+        download_dir = (
+            os.path.join(os.environ["USERPROFILE"], "Downloads", "VidSaver")
+            if "USERPROFILE" in os.environ
+            else "./downloads"
+        )
+
+    os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
+    os.makedirs(download_dir, exist_ok=True)
+    page._download_dir = download_dir
+    page._metadata_path = metadata_path
+    return download_dir, metadata_path
+
+
 def ensure_media_scanner(page: ft.Page):
     """Initialize the local media service on Android only."""
     if hasattr(page, "_media_scanner"):
@@ -105,6 +139,7 @@ async def publish_download_result(page: ft.Page, download_result: dict, metadata
             "platform": download_result["platform"],
             "url": download_result["url"],
             "date": download_result["date"],
+            "created_at": time.time(),
             "source_path": path,
             "size": size,
         }
@@ -137,6 +172,10 @@ async def publish_download_result(page: ft.Page, download_result: dict, metadata
                 }
             )
             meta[display_name] = entry
+            try:
+                os.remove(path)
+            except Exception:
+                pass
         else:
             meta[file_name] = entry
 
@@ -146,6 +185,73 @@ async def publish_download_result(page: ft.Page, download_result: dict, metadata
         save_metadata(metadata_path, meta)
         return True, ""
     return False, last_error or "Unable to publish video to Gallery."
+
+
+async def delete_saved_video(page: ft.Page, info: dict) -> bool:
+    """Delete a saved video from Android MediaStore or local filesystem."""
+    content_uri = info.get("content_uri") or ""
+    source_path = info.get("source_path") or info.get("file_path") or ""
+
+    if is_android_page(page) and content_uri:
+        scanner = ensure_media_scanner(page)
+        if scanner is None:
+            return False
+        return await scanner.delete_video(content_uri)
+
+    if source_path and os.path.exists(source_path):
+        try:
+            os.remove(source_path)
+            return True
+        except Exception:
+            return False
+
+    return not content_uri and not source_path
+
+
+async def sync_saved_videos(page: ft.Page, metadata_path: str) -> None:
+    """Restore app metadata from Android MediaStore after app updates."""
+    if not is_android_page(page):
+        return
+
+    scanner = ensure_media_scanner(page)
+    if scanner is None:
+        return
+
+    from downloader import load_metadata, save_metadata
+
+    videos = await scanner.list_videos(album="Vidsaver")
+    if not videos:
+        return
+
+    meta = load_metadata(metadata_path)
+    changed = False
+    for video in videos:
+        display_name = str(video.get("display_name") or "")
+        content_uri = str(video.get("content_uri") or "")
+        if not display_name or not content_uri:
+            continue
+
+        created_at = float(video.get("date_added") or video.get("date_modified") or time.time())
+        existing = meta.get(display_name, {})
+        restored = {
+            **existing,
+            "platform": existing.get("platform") or "Video",
+            "url": existing.get("url") or "",
+            "date": existing.get("date")
+            or datetime.fromtimestamp(created_at).strftime("%d %b %Y"),
+            "created_at": existing.get("created_at") or created_at,
+            "content_uri": content_uri,
+            "display_name": display_name,
+            "mime_type": str(video.get("mime_type") or "video/mp4"),
+            "relative_path": str(video.get("relative_path") or "Movies/Vidsaver"),
+            "size": int(video.get("size") or existing.get("size") or 0),
+        }
+        if meta.get(display_name) != restored:
+            meta[display_name] = restored
+            changed = True
+
+    if changed:
+        save_metadata(metadata_path, meta)
 
 
 @ft.component
@@ -373,9 +479,9 @@ def App(page: ft.Page):
         _, metadata = ensure_storage_paths(page)
         info = load_metadata(metadata).get(playing_file, {})
         playable_path = (
-            info.get("source_path")
+            info.get("content_uri")
+            or info.get("source_path")
             or info.get("file_path")
-            or info.get("content_uri")
             or playing_file
         )
         content_view = PlayerView(
@@ -402,6 +508,8 @@ def App(page: ft.Page):
             initial_scroll=scroll_offset,
             on_scroll_change=set_scroll_offset,
             refresh_trigger=refresh_trigger,
+            delete_from_storage=lambda info: delete_saved_video(page, info),
+            sync_from_storage=lambda: sync_saved_videos(page, metadata),
         )
 
     return ft.SafeArea(content=content_view, expand=True)
@@ -409,7 +517,7 @@ def App(page: ft.Page):
 
 async def main(page: ft.Page):
     page._event_loop = asyncio.get_running_loop()
-    ensure_storage_paths(page)
+    await init_storage_paths(page)
     ensure_media_scanner(page)
 
     page.title = "Vidsaver"

@@ -91,3 +91,34 @@ class MediaScanner(ft.Service):
         except Exception as e:
             print(f"[MediaScanner] scan_media error: {file_path}: {e}")
             return False
+
+    async def delete_video(self, content_uri: str) -> bool:
+        """Delete a MediaStore item by its content URI."""
+        if not content_uri:
+            return False
+        try:
+            result = await self._invoke_method(
+                "delete_video",
+                {"content_uri": content_uri},
+                timeout=15.0,
+            )
+            payload = json.loads(result) if result else {}
+            return bool(payload.get("success"))
+        except Exception as e:
+            print(f"[MediaScanner] delete_video error: {content_uri}: {e}")
+            return False
+
+    async def list_videos(self, album: str = "Vidsaver") -> list[dict]:
+        """List videos previously saved to the MediaStore album."""
+        try:
+            result = await self._invoke_method(
+                "list_videos",
+                {"album": album},
+                timeout=15.0,
+            )
+            payload = json.loads(result) if result else {}
+            videos = payload.get("videos") or []
+            return videos if isinstance(videos, list) else []
+        except Exception as e:
+            print(f"[MediaScanner] list_videos error: {e}")
+            return []

@@ -106,6 +106,8 @@ def LibraryView(
     initial_scroll=0,
     on_scroll_change=None,
     refresh_trigger=0,
+    delete_from_storage=None,
+    sync_from_storage=None,
 ):
     """
     Declarative component for the downloads library.
@@ -120,13 +122,16 @@ def LibraryView(
 
     def sort_key(item, loaded_meta):
         info = loaded_meta.get(item, {})
+        created_at = info.get("created_at") or 0
+        if created_at:
+            return created_at
         source_path = info.get("source_path") or info.get("file_path") or ""
         try:
             return os.path.getmtime(source_path)
         except Exception:
             return 0
 
-    def load_data():
+    def read_data():
         loaded_meta = load_metadata(metadata_path)
         valid_files = [
             name
@@ -136,6 +141,14 @@ def LibraryView(
         set_meta(loaded_meta)
         valid_files.sort(key=lambda item: sort_key(item, loaded_meta), reverse=True)
         set_files(valid_files)
+
+    async def load_data():
+        if sync_from_storage:
+            try:
+                await sync_from_storage()
+            except Exception:
+                pass
+        read_data()
 
     ft.use_effect(load_data, dependencies=[refresh_trigger])
 
@@ -150,19 +163,34 @@ def LibraryView(
 
     ft.use_effect(restore_scroll, dependencies=[files])
 
-    def confirm_delete(e):
+    async def confirm_delete():
         file_name = deleting_file
         set_deleting_file(None)
         loaded_meta = load_metadata(metadata_path)
-        info = loaded_meta.pop(file_name, {})
+        info = loaded_meta.get(file_name, {})
         source_path = info.get("source_path") or info.get("file_path") or ""
-        try:
-            if source_path and os.path.exists(source_path):
+        deleted = False
+
+        if delete_from_storage:
+            try:
+                deleted = await delete_from_storage(info)
+            except Exception:
+                deleted = False
+        elif source_path and os.path.exists(source_path):
+            try:
                 os.remove(source_path)
-        except Exception:
-            pass
+                deleted = True
+            except Exception:
+                deleted = False
+        else:
+            deleted = not source_path and not info.get("content_uri")
+
+        if not deleted:
+            return
+
+        loaded_meta.pop(file_name, None)
         save_metadata(metadata_path, loaded_meta)
-        load_data()
+        read_data()
 
     ft.use_dialog(
         ft.AlertDialog(
@@ -171,7 +199,7 @@ def LibraryView(
             content=ft.Text(f'Are you sure you want to delete "{deleting_file}"?'),
             actions=[
                 ft.TextButton("No", on_click=lambda _: set_deleting_file(None)),
-                ft.TextButton("OK", on_click=confirm_delete),
+                ft.TextButton("OK", on_click=lambda _: asyncio.create_task(confirm_delete())),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )

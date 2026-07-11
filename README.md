@@ -107,8 +107,8 @@ The main release workflow is:
 It runs only when a version tag is pushed:
 
 ```bash
-git tag v1.2.8
-git push origin v1.2.8
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 Normal pushes to `main` do not run the heavy release build.

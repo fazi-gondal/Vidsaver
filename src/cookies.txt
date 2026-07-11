@@ -12,5 +12,5 @@
 .instagram.com	TRUE	/	TRUE	1783580999	dpr	1.5
 .tiktok.com	TRUE	/	TRUE	1814080818	ttwid	1%7Cslm8vsuF4XscJ810vSeOPYdjnNKcaEhrENS6mdQGTUE%7C1782976818%7C1ae5d6cc9a2f7c23cd9e4e57993475c82843c99ae0507e6c5820f20365e80009
 .tiktok.com	TRUE	/	TRUE	0	tt_csrf_token	OVimiuqi-Tm140LIra1M6Fsq17rAU-4Y2-qA
-.tiktok.com	TRUE	/	TRUE	1798871641	tt_chain_token	Wtuv2/5VVZm7kAuyxg/eUw==
-.tiktok.com	TRUE	/	TRUE	1784183641	msToken	DV579LPguoS-1pXXmjdgtYQ6zPRW-K3WuDWIjqN8z7-2wWrUwS6tnl8vy34YfIAuGj5S6OpUa-KMMhCXtYGIH8IbDLFbmtQShhKtbaPw7B8-RRuqIuxIswQ=
+.tiktok.com	TRUE	/	TRUE	1799319498	tt_chain_token	Wtuv2/5VVZm7kAuyxg/eUw==
+.tiktok.com	TRUE	/	TRUE	1784631497	msToken	QWPN-GLIjxtiDjif_-DAzv-pCRsRL1IOpVdFkhayNeiKSf6qUHp_GdJEb_KqKsFAolAdjTQeHo58gEkAmGCzot6yddmgRHdIxjtFLw60d4mk69qT3VmtCZQ=
