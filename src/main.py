@@ -45,8 +45,10 @@ def ensure_storage_paths(page: ft.Page):
     if getattr(page, "_download_dir", None):
         return page._download_dir, page._metadata_path
 
-    app_dir = os.path.dirname(os.path.abspath(__file__))
-    metadata_path = os.path.join(app_dir, "metadata.json")
+    # FLET_APP_STORAGE_DATA is the writable data dir in built apps and flet run
+    # (0.86+: app bundle is read-only, cwd = data dir in both modes)
+    data_dir = os.environ.get("FLET_APP_STORAGE_DATA") or os.getcwd()
+    metadata_path = os.path.join(data_dir, "metadata.json")
     if is_android_page(page):
         download_dir = os.path.join(tempfile.gettempdir(), "vidsaver-staging")
     else:
@@ -67,20 +69,18 @@ async def init_storage_paths(page: ft.Page):
     if getattr(page, "_download_dir", None):
         return page._download_dir, page._metadata_path
 
-    app_dir = os.path.dirname(os.path.abspath(__file__))
+    # FLET_APP_STORAGE_DATA is the writable data dir in both built apps and
+    # flet run dev mode (0.86+: app bundle is read-only; cwd = data dir).
+    data_dir = os.environ.get("FLET_APP_STORAGE_DATA") or os.getcwd()
     if is_android_page(page):
-        try:
-            support_dir = await page.storage_paths.get_application_support_directory()
-        except Exception:
-            support_dir = app_dir
         try:
             temp_dir = await page.storage_paths.get_temporary_directory()
         except Exception:
             temp_dir = tempfile.gettempdir()
-        metadata_path = os.path.join(support_dir, "metadata.json")
+        metadata_path = os.path.join(data_dir, "metadata.json")
         download_dir = os.path.join(temp_dir, "vidsaver-staging")
     else:
-        metadata_path = os.path.join(app_dir, "metadata.json")
+        metadata_path = os.path.join(data_dir, "metadata.json")
         download_dir = (
             os.path.join(os.environ["USERPROFILE"], "Downloads", "VidSaver")
             if "USERPROFILE" in os.environ
