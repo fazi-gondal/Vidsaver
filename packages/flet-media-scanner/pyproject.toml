@@ -1,11 +1,31 @@
 [project]
 name = "flet-media-scanner"
-version = "0.85.3"
-description = "Flet extension for Android media scanner"
+version = "0.86.0"
+description = "Flet extension for Android MediaStore — scan, save, list, and delete videos in the Gallery"
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.12"
-dependencies = [
-    "flet>=0.85.0"
+authors = [
+    { name = "Fazi-Gondal", email = "nextinpk@gmail.com" }
 ]
+keywords = ["flet", "android", "media", "mediascanner", "gallery", "flutter"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "flet>=0.86.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/fazi-gondal/Vidsaver"
+Repository = "https://github.com/fazi-gondal/Vidsaver"
+"Bug Tracker" = "https://github.com/fazi-gondal/Vidsaver/issues"
 
 [build-system]
 requires = ["setuptools"]

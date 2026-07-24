@@ -17,8 +17,10 @@ Vidsaver is a Flet-based video downloader for saving videos from supported socia
 - Android APK release builds target `arm64-v8a`.
 - GitHub Releases attach:
   ```text
-  Vidsaver-vX.Y.Z-Windows.zip
-  Vidsaver-vX.Y.Z-Android-arm64-v8a.apk
+  Vidsaver-vX.Y.Z-Windows.zip           (portable, extract and run)
+  Vidsaver-vX.Y.Z-Windows-Setup.exe     (installer, double-click to install)
+  Vidsaver-vX.Y.Z-Android-arm64-v8a.apk (raw APK, direct sideload)
+  Vidsaver-vX.Y.Z-Android-arm64-v8a.zip (compressed APK, extract then install)
   ```
 ### Mobile Demo
 
@@ -32,10 +34,10 @@ Vidsaver is a Flet-based video downloader for saving videos from supported socia
 
 ## Tech Stack
 
-- Python 3.10+
-- Flet
+- Python 3.12+
+- Flet 0.86.x
 - flet-video
-- Local `flet-media-scanner` extension
+- [flet-media-scanner](https://pypi.org/project/flet-media-scanner/) (published PyPI extension)
 - yt-dlp
 - requests
 - uv
@@ -107,8 +109,8 @@ The main release workflow is:
 It runs only when a version tag is pushed:
 
 ```bash
-git tag v1.3.2
-git push origin v1.3.2
+git tag v1.3.3  
+git push origin v1.3.3
 ```
 
 Normal pushes to `main` do not run the heavy release build.
@@ -177,7 +179,9 @@ After this one-time setup, future release APKs are signed automatically with the
 
 ## Install And Update Notes
 
-- Install the `Android-arm64-v8a.apk` asset on arm64 Android devices.
+- **Windows (installer)**: Download `Windows-Setup.exe` → double-click to install. Creates Start Menu and Desktop shortcuts. Includes uninstaller via Add/Remove Programs.
+- **Windows (portable)**: Download `Windows.zip` → extract anywhere and run `vidsaver.exe`.
+- **Android**: Download `Android-arm64-v8a.apk` for direct sideload, or `Android-arm64-v8a.zip` (extract then install the `.apk` inside).
 - If an older version was installed from a wrong ABI, split APK, or different signing key, Android may show an install/package mismatch error.
 - In that case, uninstall the old app once, then install the new signed APK.
 - After stable signing is configured, future APKs should install over previous versions normally.
@@ -205,10 +209,11 @@ Make sure the APK was built after `certifi`, `charset-normalizer`, `idna`, and `
 
 ### APK Installs As 32-bit
 
-Use the release asset named:
+Use one of the Android release assets:
 
 ```text
-Vidsaver-vX.Y.Z-Android-arm64-v8a.apk
+Vidsaver-vX.Y.Z-Android-arm64-v8a.apk   ← direct sideload
+Vidsaver-vX.Y.Z-Android-arm64-v8a.zip   ← extract then install the .apk inside
 ```
 
 The workflow now fails if it cannot find an actual `arm64-v8a` APK.
@@ -226,3 +231,4 @@ The app saves through MediaStore to `Movies/Vidsaver`. Some Gallery apps may sti
 - [Flet documentation](https://flet.dev/docs/)
 - [Flet Android packaging](https://flet.dev/docs/publish/android/)
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+- [flet-media-scanner on PyPI](https://pypi.org/project/flet-media-scanner/)
