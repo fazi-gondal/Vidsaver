@@ -215,7 +215,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME}"
 
           if [ -d "artifacts/windows-build" ]; then
-            (cd artifacts && zip -r "../release/Vidsaver-${VERSION}-Windows.zip" windows-build)
+            (cd artifacts && zip -9 -r "../release/Vidsaver-${VERSION}-Windows.zip" windows-build)
           else
             echo "Missing Windows build artifact." >&2
             exit 1
