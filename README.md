@@ -108,11 +108,11 @@ The main release workflow is:
 It runs only when a version tag is pushed:
 
 ```bash
-git tag v1.3.3  
+git tag v1.3.3
 git push origin v1.3.3
 ```
 
-To delete a tag (locally and remotely) if you need to re-tag:
+To delete a tag locally and remotely (if you need to recreate/re-tag):
 
 ```bash
 git tag -d v1.3.3
