@@ -218,14 +218,34 @@ jobs:
           main_exe = exes[0] if exes else "vidsaver.exe"
           print(f"Main executable: {main_exe}")
 
-          # 1. Harvest files using heat
+          # 1. Harvest files using heat (-srd suppresses root directory wrapper)
           subprocess.run([
               heat, "dir", "build/windows",
               "-cg", "AppFiles",
               "-dr", "INSTALLFOLDER",
-              "-scom", "-sreg", "-sfrag", "-gg",
+              "-scom", "-sreg", "-sfrag", "-gg", "-srd",
               "-out", "files.wxs"
           ], check=True)
+
+          # Filter files.wxs to remove .pyc, __pycache__, and non-existent files
+          import xml.etree.ElementTree as ET
+          ns_url = "http://schemas.microsoft.com/wix/2006/wi"
+          ET.register_namespace("", ns_url)
+          tree = ET.parse("files.wxs")
+          root = tree.getroot()
+
+          # Find and remove components containing .pyc, __pycache__, or missing files
+          removed_count = 0
+          for parent in root.findall(f".//{{{ns_url}}}Directory") + root.findall(f".//{{{ns_url}}}DirectoryRef"):
+              for comp in list(parent.findall(f"{{{ns_url}}}Component")):
+                  for file_elem in comp.findall(f"{{{ns_url}}}File"):
+                      source = file_elem.attrib.get("Source", "")
+                      if source.endswith(".pyc") or "__pycache__" in source or not os.path.exists(source):
+                          parent.remove(comp)
+                          removed_count += 1
+                          break
+          print(f"Filtered out {removed_count} pyc/cache/missing file components from WiX manifest.")
+          tree.write("files.wxs", encoding="utf-8", xml_declaration=True)
 
           # 2. Write Product.wxs
           product_wxs = f'''<?xml version="1.0" encoding="UTF-8"?>
@@ -273,9 +293,9 @@ jobs:
           # 3. Compile with candle
           subprocess.run([candle, "product.wxs", "files.wxs"], check=True)
 
-          # 4. Link with light
+          # 4. Link with light (-b build/windows sets base path for file resolution)
           msi_out = f"installer/Vidsaver-{tag}-Windows.msi" if tag else "installer/Vidsaver-Windows.msi"
-          subprocess.run([light, "product.wixobj", "files.wixobj", "-out", msi_out], check=True)
+          subprocess.run([light, "product.wixobj", "files.wixobj", "-b", "build/windows", "-out", msi_out], check=True)
           print(f"Generated MSI installer at {msi_out}")
 
       - name: Upload Windows MSI artifact
