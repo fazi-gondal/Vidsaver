@@ -176,11 +176,114 @@ jobs:
         run: |
           ls -R "${{ matrix.artifact_path }}"
 
-      - name: Upload build artifact
+      - name: Create Windows MSI installer
+        if: matrix.name == 'windows'
+        shell: python
+        run: |
+          import subprocess, pathlib, os, sys, glob
+
+          tag = "${{ github.ref_name }}"
+          version = tag.lstrip("v") if tag else "1.0.0"
+          parts = version.split(".")
+          while len(parts) < 3:
+              parts.append("0")
+          msi_version = ".".join(parts[:3])
+
+          os.makedirs("installer", exist_ok=True)
+
+          # Find WiX bin directory
+          wix_bin = None
+          possible_dirs = glob.glob(r"C:\Program Files (x86)\WiX Toolset v*\bin")
+          for d in possible_dirs:
+              if os.path.exists(os.path.join(d, "candle.exe")):
+                  wix_bin = d
+                  break
+
+          if not wix_bin:
+              for p in os.environ.get("PATH", "").split(os.pathsep):
+                  if os.path.exists(os.path.join(p, "candle.exe")):
+                      wix_bin = p
+                      break
+
+          if not wix_bin:
+              print("WiX 3 not found in standard paths.")
+              sys.exit(1)
+
+          heat = os.path.join(wix_bin, "heat.exe")
+          candle = os.path.join(wix_bin, "candle.exe")
+          light = os.path.join(wix_bin, "light.exe")
+
+          # Detect exe name inside build/windows
+          exes = [e.name for e in pathlib.Path("build/windows").rglob("*.exe")]
+          main_exe = exes[0] if exes else "vidsaver.exe"
+          print(f"Main executable: {main_exe}")
+
+          # 1. Harvest files using heat
+          subprocess.run([
+              heat, "dir", "build/windows",
+              "-cg", "AppFiles",
+              "-dr", "INSTALLFOLDER",
+              "-scom", "-sreg", "-sfrag", "-gg",
+              "-out", "files.wxs"
+          ], check=True)
+
+          # 2. Write Product.wxs
+          product_wxs = f'''<?xml version="1.0" encoding="UTF-8"?>
+          <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+              <Product Id="*" Name="Vidsaver" Language="1033" Version="{msi_version}" Manufacturer="NextInPK" UpgradeCode="7F13F6E2-81B4-4D88-92A3-9A2E12F851A9">
+                  <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+                  <MajorUpgrade DowngradeErrorMessage="A newer version of Vidsaver is already installed." />
+                  <MediaTemplate EmbedCab="yes" />
+
+                  <Feature Id="ProductFeature" Title="Vidsaver" Level="1">
+                      <ComponentGroupRef Id="AppFiles" />
+                      <ComponentRef Id="ApplicationShortcut" />
+                  </Feature>
+              </Product>
+
+              <Fragment>
+                  <Directory Id="TARGETDIR" Name="SourceDir">
+                      <Directory Id="ProgramFiles64Folder">
+                          <Directory Id="INSTALLFOLDER" Name="Vidsaver" />
+                      </Directory>
+                      <Directory Id="ProgramMenuFolder">
+                          <Directory Id="ApplicationProgramsFolder" Name="Vidsaver"/>
+                      </Directory>
+                  </Directory>
+              </Fragment>
+
+              <Fragment>
+                  <DirectoryRef Id="ApplicationProgramsFolder">
+                      <Component Id="ApplicationShortcut" Guid="8C28D052-1A4C-4F9C-9C5A-2F1E0F5B8A12">
+                          <Shortcut Id="ApplicationStartMenuShortcut"
+                                    Name="Vidsaver"
+                                    Description="Vidsaver Video Downloader"
+                                    Target="[INSTALLFOLDER]{main_exe}"
+                                    WorkingDirectory="INSTALLFOLDER"/>
+                          <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
+                          <RegistryValue Root="HKCU" Key="Software\\NextInPK\\Vidsaver" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+                      </Component>
+                  </DirectoryRef>
+              </Fragment>
+          </Wix>
+          '''
+
+          pathlib.Path("product.wxs").write_text(product_wxs, encoding="utf-8")
+
+          # 3. Compile with candle
+          subprocess.run([candle, "product.wxs", "files.wxs"], check=True)
+
+          # 4. Link with light
+          msi_out = f"installer/Vidsaver-{tag}-Windows.msi" if tag else "installer/Vidsaver-Windows.msi"
+          subprocess.run([light, "product.wixobj", "files.wixobj", "-out", msi_out], check=True)
+          print(f"Generated MSI installer at {msi_out}")
+
+      - name: Upload Windows MSI artifact
+        if: matrix.name == 'windows'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}-build
-          path: ${{ matrix.artifact_path }}
+          name: windows-msi
+          path: installer/*.msi
           compression-level: 0
           overwrite: true
           if-no-files-found: error
@@ -221,6 +324,14 @@ jobs:
             exit 1
           fi
 
+          MSI="$(find artifacts/windows-msi -type f -name "*.msi" 2>/dev/null | head -n 1)"
+          if [ -n "${MSI}" ]; then
+            cp "${MSI}" "release/Vidsaver-${VERSION}-Windows.msi"
+          else
+            echo "Missing Windows MSI artifact." >&2
+            exit 1
+          fi
+
           if [ ! -d "artifacts/apk-build" ]; then
             echo "Missing Android APK artifact." >&2
             exit 1
@@ -247,6 +358,7 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             release/Vidsaver-${{ github.ref_name }}-Windows.zip
+            release/Vidsaver-${{ github.ref_name }}-Windows.msi
             release/Vidsaver-${{ github.ref_name }}-Android-arm64-v8a.apk
             release/Vidsaver-${{ github.ref_name }}-Android-arm64-v8a.zip
 
