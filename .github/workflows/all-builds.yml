@@ -176,6 +176,16 @@ jobs:
         run: |
           ls -R "${{ matrix.artifact_path }}"
 
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-build
+          path: ${{ matrix.artifact_path }}
+          compression-level: 0
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Create Windows MSI installer
         if: matrix.name == 'windows'
         shell: python
