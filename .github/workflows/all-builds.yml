@@ -235,16 +235,25 @@ jobs:
           root = tree.getroot()
 
           # Find and remove components containing .pyc, __pycache__, or missing files
-          removed_count = 0
+          removed_comp_ids = set()
           for parent in root.findall(f".//{{{ns_url}}}Directory") + root.findall(f".//{{{ns_url}}}DirectoryRef"):
               for comp in list(parent.findall(f"{{{ns_url}}}Component")):
                   for file_elem in comp.findall(f"{{{ns_url}}}File"):
                       source = file_elem.attrib.get("Source", "")
                       if source.endswith(".pyc") or "__pycache__" in source or not os.path.exists(source):
+                          comp_id = comp.attrib.get("Id")
+                          if comp_id:
+                              removed_comp_ids.add(comp_id)
                           parent.remove(comp)
-                          removed_count += 1
                           break
-          print(f"Filtered out {removed_count} pyc/cache/missing file components from WiX manifest.")
+
+          # Also remove matching ComponentRef elements from ComponentGroup to avoid LGHT0094
+          for group in root.findall(f".//{{{ns_url}}}ComponentGroup"):
+              for cref in list(group.findall(f"{{{ns_url}}}ComponentRef")):
+                  if cref.attrib.get("Id") in removed_comp_ids:
+                      group.remove(cref)
+
+          print(f"Filtered out {len(removed_comp_ids)} pyc/cache/missing file components and ComponentRefs from WiX manifest.")
           tree.write("files.wxs", encoding="utf-8", xml_declaration=True)
 
           # 2. Write Product.wxs
