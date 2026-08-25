@@ -1,3 +1,5 @@
+
+
 # Vidsaver
 
 Vidsaver is a Flet-based video downloader for saving videos from supported social/video platforms to the device. It uses `yt-dlp` for download handling and provides a simple mobile/desktop UI for pasting a link, downloading, viewing saved videos, and deleting downloads.
@@ -81,6 +83,7 @@ uv run flet run --web
 The normal Android 13+ download flow does not request storage or media permissions. Vidsaver downloads into app-private staging storage, then publishes the finished video through Android MediaStore.
 
 ```toml
+[tool.flet.android.permission]
 "android.permission.INTERNET" = true
 ```
 
