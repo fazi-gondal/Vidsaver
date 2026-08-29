@@ -242,3 +242,7 @@ The app saves through MediaStore to `Movies/Vidsaver`. Some Gallery apps may sti
 - [Flet Android packaging](https://flet.dev/docs/publish/android/)
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 - [flet-media-scanner on PyPI](https://pypi.org/project/flet-media-scanner/)
+
+<p align="center">
+  Crafted with care by <strong>Fazi Gondal</strong>
+</p>
