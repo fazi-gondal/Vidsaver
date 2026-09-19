@@ -12,14 +12,21 @@ def PlayerView(file_path: str, on_close):
     """
     Declarative full-screen video player view.
     Handles its own lifecycle and unmounts cleanly when removed from the tree.
+
+    The Video control is memoized so it survives re-renders without restarting
+    playback. ft.use_memo only recreates it when file_path changes.
     """
     file_name = os.path.basename(file_path)
-    
-    # Initialize the video control with the specified media
-    video_control = ftv.Video(
-        expand=True,
-        autoplay=True,
-        playlist=[ftv.VideoMedia(file_path)]
+
+    # Memoize the Video control — prevents recreation (and playback reset)
+    # on every re-render triggered by parent state changes.
+    video_control = ft.use_memo(
+        lambda: ftv.Video(
+            expand=True,
+            autoplay=True,
+            playlist=[ftv.VideoMedia(file_path)],
+        ),
+        dependencies=[file_path],
     )
 
     return ft.Container(

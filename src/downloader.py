@@ -108,7 +108,7 @@ def mark_files_recent(paths: list[str]) -> None:
 
 def collect_downloaded_paths(info) -> list[str]:
     """Return final downloaded file paths from yt-dlp info dictionaries."""
-    paths = []
+    seen = {}
 
     def add_from(item):
         if not isinstance(item, dict):
@@ -116,16 +116,16 @@ def collect_downloaded_paths(info) -> list[str]:
         for download in item.get("requested_downloads") or []:
             path = download.get("filepath") or download.get("filename")
             if path:
-                paths.append(path)
+                seen[path] = None
         for key in ("filepath", "_filename", "filename"):
             path = item.get(key)
             if path:
-                paths.append(path)
+                seen[path] = None
         for entry in item.get("entries") or []:
             add_from(entry)
 
     add_from(info)
-    return paths
+    return list(seen.keys())
 
 
 def run_download(
@@ -164,19 +164,20 @@ def run_download(
             except ValueError:
                 pass
             on_status(f"Downloading: {raw.strip()}")
-            page.update()
+            # NOTE: page.update() must NOT be called from a worker thread.
+            # The on_status/on_progress callbacks dispatch via call_soon_threadsafe.
         elif d["status"] == "finished":
             filename = d.get("filename")
             if filename:
                 downloaded_paths.append(filename)
             on_progress(1.0)
             on_status("Preparing file...")
-            page.update()
+            # NOTE: page.update() removed — thread-unsafe here.
 
     os.makedirs(target_dir, exist_ok=True)
 
     ydl_opts = {
-        "outtmpl": os.path.join(target_dir, "%(title).80s [%(id)s].%(ext)s"),
+        "outtmpl": os.path.join(target_dir, "%(title).100s.%(ext)s"),
         "progress_hooks": [_hook],
         "cookiefile": cookie_path,
         "updatetime": False,
@@ -221,10 +222,8 @@ def run_download(
         from yt_dlp import YoutubeDL
 
         on_status("Analyzing video...")
-        page.update()
         with YoutubeDL(ydl_opts) as ydl:
             on_status("Downloading video...")
-            page.update()
             info = ydl.extract_info(url, download=True)
             downloaded_paths.extend(collect_downloaded_paths(info))
 

@@ -1,29 +1,30 @@
 
-
 # Vidsaver
 
-Vidsaver is a Flet-based video downloader for saving videos from supported social/video platforms to the device. It uses `yt-dlp` for download handling and provides a simple mobile/desktop UI for pasting a link, downloading, viewing saved videos, and deleting downloads.
+Vidsaver is a cross-platform video downloader built with **Python 3.14** and **Flet 1.0**. It uses `yt-dlp` for download handling and provides a clean mobile/desktop UI for pasting a link, downloading, viewing saved videos, and deleting downloads.
 
-**Download TikTok and Instagram reels without watermark in Full HD**
+**Download TikTok and Instagram reels without watermark in Full HD.**
 
 ## Features
 
-- Download videos from common video URLs supported by `yt-dlp`.
+- Download videos from all platforms supported by `yt-dlp` (TikTok, Instagram, YouTube, Twitter/X, Facebook, and more)
 - Android downloads are published through MediaStore to:
   ```text
   Movies/Vidsaver
   ```
-- Android videos appear in Gallery without broad storage access or a media scan.
-- Downloads list with video metadata, file size, platform chip, play action, and delete confirmation.
-- Built-in video playback with `flet-video`.
-- Android APK release builds target `arm64-v8a`.
+- Android videos appear in the Gallery without broad storage access or a media scan
+- Downloads library with video metadata, file size, platform chip, playback, and delete confirmation
+- Built-in video player powered by `flet-video`
+- Clipboard auto-paste — opens the paste bar when a supported video link is in the clipboard
+- Android APK release builds target `arm64-v8a`
 - GitHub Releases attach:
   ```text
-  Vidsaver-vX.Y.Z-Windows.zip           (portable, extract and run)
-  Vidsaver-vX.Y.Z-Windows.msi           (Windows Installer package)
-  Vidsaver-vX.Y.Z-Android-arm64-v8a.apk (raw APK, direct sideload)
-  Vidsaver-vX.Y.Z-Android-arm64-v8a.zip (compressed APK, extract then install)
+  Vidsaver-vX.Y.Z-Windows.zip              (portable — extract and run)
+  Vidsaver-vX.Y.Z-Windows-setup.exe        (Inno Setup installer — installs to C:\Program Files\Vidsaver)
+  Vidsaver-vX.Y.Z-Android-arm64-v8a.apk   (raw APK, direct sideload)
+  Vidsaver-vX.Y.Z-Android-arm64-v8a.zip   (compressed APK, extract then install)
   ```
+
 ### Mobile Demo
 
 ![Demo](/src/assets/demo.jpg)
@@ -36,10 +37,10 @@ Vidsaver is a Flet-based video downloader for saving videos from supported socia
 
 ## Tech Stack
 
-- Python 3.12+
-- Flet 0.86.x
-- flet-video
-- [flet-media-scanner](https://pypi.org/project/flet-media-scanner/) (published PyPI extension)
+- Python 3.14
+- Flet 1.0
+- flet-video 1.0
+- [flet-media-scanner](https://pypi.org/project/flet-media-scanner/) 1.0.2 (custom PyPI extension)
 - yt-dlp
 - requests
 - uv
@@ -49,8 +50,12 @@ Vidsaver is a Flet-based video downloader for saving videos from supported socia
 ```text
 .
 |-- .github/workflows/
-|   |-- all-builds.yml
+|   |-- all-builds.yml                        (Windows + Android CI/CD)
 |   `-- generate-android-keystore.yml
+|-- packages/
+|   |-- flet-media-scanner/                   (custom Flet extension — published to PyPI)
+|   `-- windows/
+|       `-- installer.iss                     (Inno Setup script for Windows EXE installer)
 |-- src/
 |   |-- assets/
 |   |   |-- icon.png
@@ -92,13 +97,19 @@ The normal Android 13+ download flow does not request storage or media permissio
 Android arm64 APK:
 
 ```bash
-uv run flet build apk --split-per-abi --arch arm64-v8a --yes --verbose
+uv run flet build apk --split-per-abi --arch arm64-v8a --source-packages packages/flet-media-scanner --yes --verbose
 ```
 
 Windows:
 
 ```bash
-uv run flet build windows --yes --verbose
+uv run flet build windows --source-packages packages/flet-media-scanner --yes --verbose
+```
+
+Build the Windows installer locally (requires [Inno Setup](https://jrsoftware.org/isinfo.php)):
+
+```bash
+ISCC.exe /DAppExe=vidsaver.exe /DAppVersion=1.3.3 /DAppArch=x64 packages\windows\installer.iss
 ```
 
 ## GitHub Release Workflow
@@ -112,25 +123,37 @@ The main release workflow is:
 It runs only when a version tag is pushed:
 
 ```bash
-git tag v1.3.3
-git push origin v1.3.3
+git tag v1.4.0
+git push origin v1.4.0
 ```
 
 To delete a tag locally and remotely (if you need to recreate/re-tag):
 
 ```bash
-git tag -d v1.3.3
-git push origin :refs/tags/v1.3.3
+git tag -d v1.4.0
+git push origin :refs/tags/v1.4.0
 ```
 
-Normal pushes to `main` do not run the heavy release build.
+Normal pushes to `main` do not trigger the release build.
 
-The workflow builds:
+The workflow builds and publishes:
 
-- Windows
-- Android APK, `arm64-v8a` only
+| Target | Runner | Output |
+|---|---|---|
+| Windows | `windows-latest` | Portable `.zip` + Inno Setup `.exe` installer |
+| Android | `ubuntu-latest` | Signed `arm64-v8a` `.apk` + `.zip` |
 
-The release job refuses to publish an Android APK unless the APK filename contains:
+### Windows Installer (CI)
+
+After `flet build windows`, the workflow runs `ISCC.exe` with the script at `packages/windows/installer.iss`:
+
+- Detects the `.exe` flet produced automatically
+- Passes version from the Git tag via `/DAppVersion`
+- Output: `Vidsaver-windows-x64-setup.exe` in `build/`
+- Installs to `C:\Program Files\Vidsaver` (64-bit)
+- Creates Start Menu and optional Desktop shortcut
+
+The release job refuses to publish an Android APK unless the filename contains:
 
 ```text
 arm64-v8a
@@ -189,23 +212,23 @@ After this one-time setup, future release APKs are signed automatically with the
 
 ## Install And Update Notes
 
-- **Windows (MSI Installer)**: Download `Windows.msi` → double-click to install. Creates Start Menu shortcuts and supports standard Windows installation/uninstallation.
-- **Windows (Portable)**: Download `Windows.zip` → extract anywhere and run `vidsaver.exe`.
+- **Windows (Installer)**: Download `Vidsaver-vX.Y.Z-Windows-setup.exe` → double-click to install. Installs to `C:\Program Files\Vidsaver`, creates Start Menu shortcuts, and supports standard Windows uninstall.
+- **Windows (Portable)**: Download `Windows.zip` → extract anywhere and run `vidsaver.exe`. No installation needed.
 - **Android**: Download `Android-arm64-v8a.apk` for direct sideload, or `Android-arm64-v8a.zip` (extract then install the `.apk` inside).
-- If an older version was installed from a wrong ABI, split APK, or different signing key, Android may show an install/package mismatch error.
-- In that case, uninstall the old app once, then install the new signed APK.
-- After stable signing is configured, future APKs should install over previous versions normally.
+- If an older version was installed from a wrong ABI, split APK, or different signing key, Android may show an install/package mismatch error. Uninstall the old app once, then install the new signed APK.
+- After stable signing is configured, future APKs install over previous versions normally.
 
 ## Download Behavior
 
 When a link is submitted:
 
 1. The app shows an active progress bar immediately.
-2. `yt-dlp` analyzes the URL.
-3. When download progress is available, the progress bar shows percentage.
+2. `yt-dlp` analyzes the URL in a background thread (UI stays responsive).
+3. Download progress updates the progress bar in real time.
 4. On Android, the finished file is published to MediaStore under `Movies/Vidsaver`.
+5. A snackbar confirms the download is complete.
 
-Fast downloads may finish before much percentage progress is visible.
+Files are saved with the video's title as the filename — no platform IDs appended.
 
 ## Cookies
 
@@ -226,15 +249,19 @@ Vidsaver-vX.Y.Z-Android-arm64-v8a.apk   ← direct sideload
 Vidsaver-vX.Y.Z-Android-arm64-v8a.zip   ← extract then install the .apk inside
 ```
 
-The workflow now fails if it cannot find an actual `arm64-v8a` APK.
+The workflow fails if it cannot find an actual `arm64-v8a` APK.
 
 ### New Version Will Not Install Over Old Version
 
-This is usually caused by a different signing key or a previous wrong ABI/split install. Configure stable signing secrets and uninstall the older build once if necessary.
+Usually caused by a different signing key or a previous wrong ABI/split install. Configure stable signing secrets and uninstall the older build once if necessary.
 
 ### Video Does Not Appear In Gallery
 
-The app saves through MediaStore to `Movies/Vidsaver`. Some Gallery apps may still take a short time to refresh their cache.
+The app saves through MediaStore to `Movies/Vidsaver`. Some Gallery apps may take a short time to refresh their cache.
+
+### `DeprecationWarning` On Startup
+
+All Flet 1.0 deprecations have been resolved. If you see any, check that you are running the latest `main` and that `flet==1.0` is installed.
 
 ## Useful Links
 
@@ -242,6 +269,7 @@ The app saves through MediaStore to `Movies/Vidsaver`. Some Gallery apps may sti
 - [Flet Android packaging](https://flet.dev/docs/publish/android/)
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 - [flet-media-scanner on PyPI](https://pypi.org/project/flet-media-scanner/)
+- [Inno Setup](https://jrsoftware.org/isinfo.php)
 
 <p align="center">
   Crafted with care by <strong>Fazi Gondal</strong>

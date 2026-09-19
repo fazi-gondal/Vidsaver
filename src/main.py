@@ -52,9 +52,11 @@ def ensure_storage_paths(page: ft.Page):
     if is_android_page(page):
         download_dir = os.path.join(tempfile.gettempdir(), "vidsaver-staging")
     else:
+        # Use os.environ.get to avoid KeyError on non-Windows platforms
+        user_profile = os.environ.get("USERPROFILE") or os.environ.get("HOME") or ""
         download_dir = (
-            os.path.join(os.environ["USERPROFILE"], "Downloads", "VidSaver")
-            if "USERPROFILE" in os.environ
+            os.path.join(user_profile, "Downloads", "VidSaver")
+            if user_profile
             else "./downloads"
         )
 
@@ -81,9 +83,11 @@ async def init_storage_paths(page: ft.Page):
         download_dir = os.path.join(temp_dir, "vidsaver-staging")
     else:
         metadata_path = os.path.join(data_dir, "metadata.json")
+        # Use os.environ.get to avoid KeyError on non-Windows platforms
+        user_profile = os.environ.get("USERPROFILE") or os.environ.get("HOME") or ""
         download_dir = (
-            os.path.join(os.environ["USERPROFILE"], "Downloads", "VidSaver")
-            if "USERPROFILE" in os.environ
+            os.path.join(user_profile, "Downloads", "VidSaver")
+            if user_profile
             else "./downloads"
         )
 
@@ -119,6 +123,13 @@ def ensure_media_scanner(page: ft.Page):
         page._media_scanner = None
 
     return page._media_scanner
+
+
+def get_clipboard(page: ft.Page) -> ft.Clipboard:
+    """Return a stable Clipboard service instance (created once per session)."""
+    if not hasattr(page, "_clipboard"):
+        page._clipboard = ft.Clipboard()
+    return page._clipboard
 
 
 async def publish_download_result(page: ft.Page, download_result: dict, metadata_path: str):
@@ -268,7 +279,7 @@ def HomeView(
 
     async def try_paste_clipboard():
         try:
-            clip = await ft.Clipboard().get()
+            clip = await get_clipboard(page).get()
             if clip and is_video_url(clip) and clip.strip() != url.strip():
                 set_url(clip.strip())
         except Exception:
@@ -302,7 +313,9 @@ def HomeView(
                     on_focus=lambda e: asyncio.create_task(on_url_focus(e)),
                     on_submit=handle_submit,
                     label="Paste video link",
-                    border_radius=12,
+                    border=ft.OutlineInputBorder(
+                        border_radius=ft.BorderRadius(12, 12, 12, 12)
+                    ),
                     filled=True,
                     prefix_icon=ft.Icons.LINK,
                 ),
@@ -390,15 +403,15 @@ def App(page: ft.Page):
         set_download_disabled(False)
         set_refresh_trigger(lambda prev: prev + 1)
         if is_done:
-            page.overlay.append(
-                ft.SnackBar(
-                    content=ft.Text("Video download complete"),
-                    open=True,
-                    duration=2500,
-                    behavior=ft.SnackBarBehavior.FLOATING,
-                    margin=ft.Margin(left=16, top=0, right=16, bottom=10),
-                )
+            # Flet 1.0.0: show SnackBar via overlay.append + open=True + page.update()
+            snack = ft.SnackBar(
+                content=ft.Text("Video download complete"),
+                open=True,
+                duration=2500,
+                behavior=ft.SnackBarBehavior.FLOATING,
+                margin=ft.Margin(left=16, top=0, right=16, bottom=10),
             )
+            page.overlay.append(snack)
             page.update()
 
     def start_download(url: str):
@@ -419,19 +432,20 @@ def App(page: ft.Page):
 
             had_error = [False]
 
-            def on_status(message):
+            # Use default-arg capture to avoid late-binding lambda bugs
+            def on_status(message, _set=set_status_text):
                 if message.startswith("Downloading:"):
-                    page.loop.call_soon_threadsafe(lambda: set_status_text("Downloading video..."))
+                    page.loop.call_soon_threadsafe(_set, "Downloading video...")
                 else:
-                    page.loop.call_soon_threadsafe(lambda: set_status_text(message))
+                    page.loop.call_soon_threadsafe(_set, message)
 
-            def on_progress(value):
-                page.loop.call_soon_threadsafe(lambda: set_progress_val(value))
+            def on_progress(value, _set=set_progress_val):
+                page.loop.call_soon_threadsafe(_set, value)
 
-            def on_error(message):
-                had_error[0] = True
-                page.loop.call_soon_threadsafe(lambda: set_download_completed(False))
-                page.loop.call_soon_threadsafe(lambda: set_status_text(f"Error: {message}"))
+            def on_error(message, _had=had_error, _set=set_status_text):
+                _had[0] = True
+                page.loop.call_soon_threadsafe(set_download_completed, False)
+                page.loop.call_soon_threadsafe(_set, f"Error: {message}")
 
             def on_finish():
                 pass
@@ -516,14 +530,12 @@ def App(page: ft.Page):
 
 
 async def main(page: ft.Page):
-    page._event_loop = asyncio.get_running_loop()
     await init_storage_paths(page)
     ensure_media_scanner(page)
 
     page.title = "Vidsaver"
     page.padding = 0
     page.spacing = 0
-    page.safe_area = True
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.theme = ft.Theme(

@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 env:
-  UV_PYTHON: "3.12"
+  UV_PYTHON: "3.14"
   PYTHONUTF8: "1"
   FLET_CLI_NO_RICH_OUTPUT: "1"
 
@@ -186,147 +186,48 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Create Windows MSI installer
+      - name: Build Windows installer (Inno Setup)
         if: matrix.name == 'windows'
-        shell: python
+        shell: pwsh
         run: |
-          import subprocess, pathlib, os, sys, glob
+          # Detect the .exe produced by flet build windows
+          $exe = Get-ChildItem -Path build\windows -Filter *.exe -Recurse | Select-Object -First 1
+          if (-not $exe) { Write-Error 'No .exe found in build/windows'; exit 1 }
+          $appExe  = $exe.Name
+          Write-Host "Detected EXE: $appExe"
 
-          tag = "${{ github.ref_name }}"
-          version = tag.lstrip("v") if tag else "1.0.0"
-          parts = version.split(".")
-          while len(parts) < 3:
-              parts.append("0")
-          msi_version = ".".join(parts[:3])
+          # Parse version from tag (v1.2.3 -> 1.2.3), fall back to 1.0.0
+          $tag     = "${{ github.ref_name }}"
+          $version = if ($tag) { $tag.TrimStart('v') } else { '1.0.0' }
 
-          os.makedirs("installer", exist_ok=True)
+          # Locate ISCC.exe
+          $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+          if (-not $iscc) {
+            $iscc = Get-ChildItem 'C:\Program Files (x86)\Inno Setup*\ISCC.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $iscc) { Write-Error 'Inno Setup (ISCC.exe) not found'; exit 1 }
 
-          # Find WiX bin directory
-          wix_bin = None
-          possible_dirs = glob.glob(r"C:\Program Files (x86)\WiX Toolset v*\bin")
-          for d in possible_dirs:
-              if os.path.exists(os.path.join(d, "candle.exe")):
-                  wix_bin = d
-                  break
+          $issPath = (Resolve-Path 'packages\windows\installer.iss').Path
+          & $iscc.Source `
+            /DAppExe=$appExe `
+            /DAppVersion=$version `
+            /DAppArch=x64 `
+            $issPath
 
-          if not wix_bin:
-              for p in os.environ.get("PATH", "").split(os.pathsep):
-                  if os.path.exists(os.path.join(p, "candle.exe")):
-                      wix_bin = p
-                      break
+          if ($LASTEXITCODE -ne 0) { Write-Error "ISCC failed with code $LASTEXITCODE"; exit 1 }
+          Write-Host "Installer built successfully."
 
-          if not wix_bin:
-              print("WiX 3 not found in standard paths.")
-              sys.exit(1)
-
-          heat = os.path.join(wix_bin, "heat.exe")
-          candle = os.path.join(wix_bin, "candle.exe")
-          light = os.path.join(wix_bin, "light.exe")
-
-          # Detect exe name inside build/windows
-          exes = [e.name for e in pathlib.Path("build/windows").rglob("*.exe")]
-          main_exe = exes[0] if exes else "vidsaver.exe"
-          print(f"Main executable: {main_exe}")
-
-          # 1. Harvest files using heat (-srd suppresses root directory wrapper)
-          subprocess.run([
-              heat, "dir", "build/windows",
-              "-cg", "AppFiles",
-              "-dr", "INSTALLFOLDER",
-              "-scom", "-sreg", "-sfrag", "-gg", "-srd",
-              "-out", "files.wxs"
-          ], check=True)
-
-          # Filter files.wxs to remove .pyc, __pycache__, and non-existent files
-          import xml.etree.ElementTree as ET
-          ns_url = "http://schemas.microsoft.com/wix/2006/wi"
-          ET.register_namespace("", ns_url)
-          tree = ET.parse("files.wxs")
-          root = tree.getroot()
-
-          # Find and remove components containing .pyc, __pycache__, or missing files
-          removed_comp_ids = set()
-          for parent in root.findall(f".//{{{ns_url}}}Directory") + root.findall(f".//{{{ns_url}}}DirectoryRef"):
-              for comp in list(parent.findall(f"{{{ns_url}}}Component")):
-                  for file_elem in comp.findall(f"{{{ns_url}}}File"):
-                      source = file_elem.attrib.get("Source", "")
-                      if source.endswith(".pyc") or "__pycache__" in source or not os.path.exists(source):
-                          comp_id = comp.attrib.get("Id")
-                          if comp_id:
-                              removed_comp_ids.add(comp_id)
-                          parent.remove(comp)
-                          break
-
-          # Also remove matching ComponentRef elements from ComponentGroup to avoid LGHT0094
-          for group in root.findall(f".//{{{ns_url}}}ComponentGroup"):
-              for cref in list(group.findall(f"{{{ns_url}}}ComponentRef")):
-                  if cref.attrib.get("Id") in removed_comp_ids:
-                      group.remove(cref)
-
-          print(f"Filtered out {len(removed_comp_ids)} pyc/cache/missing file components and ComponentRefs from WiX manifest.")
-          tree.write("files.wxs", encoding="utf-8", xml_declaration=True)
-
-          # 2. Write Product.wxs
-          product_wxs = f'''<?xml version="1.0" encoding="UTF-8"?>
-          <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-              <Product Id="*" Name="Vidsaver" Language="1033" Version="{msi_version}" Manufacturer="NextInPK" UpgradeCode="7F13F6E2-81B4-4D88-92A3-9A2E12F851A9">
-                  <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
-                  <MajorUpgrade DowngradeErrorMessage="A newer version of Vidsaver is already installed." />
-                  <MediaTemplate EmbedCab="yes" />
-
-                  <Feature Id="ProductFeature" Title="Vidsaver" Level="1">
-                      <ComponentGroupRef Id="AppFiles" />
-                      <ComponentRef Id="ApplicationShortcut" />
-                  </Feature>
-              </Product>
-
-              <Fragment>
-                  <Directory Id="TARGETDIR" Name="SourceDir">
-                      <Directory Id="ProgramFiles64Folder">
-                          <Directory Id="INSTALLFOLDER" Name="Vidsaver" />
-                      </Directory>
-                      <Directory Id="ProgramMenuFolder">
-                          <Directory Id="ApplicationProgramsFolder" Name="Vidsaver"/>
-                      </Directory>
-                  </Directory>
-              </Fragment>
-
-              <Fragment>
-                  <DirectoryRef Id="ApplicationProgramsFolder">
-                      <Component Id="ApplicationShortcut" Guid="8C28D052-1A4C-4F9C-9C5A-2F1E0F5B8A12">
-                          <Shortcut Id="ApplicationStartMenuShortcut"
-                                    Name="Vidsaver"
-                                    Description="Vidsaver Video Downloader"
-                                    Target="[INSTALLFOLDER]{main_exe}"
-                                    WorkingDirectory="INSTALLFOLDER"/>
-                          <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
-                          <RegistryValue Root="HKCU" Key="Software\\NextInPK\\Vidsaver" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
-                      </Component>
-                  </DirectoryRef>
-              </Fragment>
-          </Wix>
-          '''
-
-          pathlib.Path("product.wxs").write_text(product_wxs, encoding="utf-8")
-
-          # 3. Compile with candle
-          subprocess.run([candle, "product.wxs", "files.wxs"], check=True)
-
-          # 4. Link with light (-b build/windows sets base path for file resolution)
-          msi_out = f"installer/Vidsaver-{tag}-Windows.msi" if tag else "installer/Vidsaver-Windows.msi"
-          subprocess.run([light, "product.wixobj", "files.wixobj", "-b", "build/windows", "-out", msi_out], check=True)
-          print(f"Generated MSI installer at {msi_out}")
-
-      - name: Upload Windows MSI artifact
+      - name: Upload Windows installer artifact
         if: matrix.name == 'windows'
         uses: actions/upload-artifact@v4
         with:
-          name: windows-msi
-          path: installer/*.msi
+          name: windows-installer
+          path: build/Vidsaver-windows-x64-setup.exe
           compression-level: 0
           overwrite: true
           if-no-files-found: error
           retention-days: 30
+
 
   release:
     name: Publish GitHub Release
@@ -363,11 +264,11 @@ jobs:
             exit 1
           fi
 
-          MSI="$(find artifacts/windows-msi -type f -name "*.msi" 2>/dev/null | head -n 1)"
-          if [ -n "${MSI}" ]; then
-            cp "${MSI}" "release/Vidsaver-${VERSION}-Windows.msi"
+          SETUP_EXE="$(find artifacts/windows-installer -type f -name "*.exe" 2>/dev/null | head -n 1)"
+          if [ -n "${SETUP_EXE}" ]; then
+            cp "${SETUP_EXE}" "release/Vidsaver-${VERSION}-Windows-setup.exe"
           else
-            echo "Missing Windows MSI artifact." >&2
+            echo "Missing Windows installer artifact." >&2
             exit 1
           fi
 
@@ -397,7 +298,7 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             release/Vidsaver-${{ github.ref_name }}-Windows.zip
-            release/Vidsaver-${{ github.ref_name }}-Windows.msi
+            release/Vidsaver-${{ github.ref_name }}-Windows-setup.exe
             release/Vidsaver-${{ github.ref_name }}-Android-arm64-v8a.apk
             release/Vidsaver-${{ github.ref_name }}-Android-arm64-v8a.zip
 

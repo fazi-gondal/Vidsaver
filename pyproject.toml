@@ -31,7 +31,7 @@ org = "com.fazi"
 product = "Vidsaver"
 company = "NextInPK"
 copyright = "Copyright (C) 2023-2026 by Fazi-Gondal"
-python_version = "3.12"
+python_version = "3.14"
 
 [tool.flet.icons]
 android = "assets/icon.png"

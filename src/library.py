@@ -131,15 +131,20 @@ def LibraryView(
         except Exception:
             return 0
 
-    def read_data():
-        loaded_meta = load_metadata(metadata_path)
-        valid_files = [
-            name
-            for name in loaded_meta
-            if name.lower().endswith(VIDEO_EXTENSIONS)
-        ]
+    async def read_data_async():
+        """Load and sort metadata off the event loop to keep the UI responsive."""
+        def _load():
+            loaded_meta = load_metadata(metadata_path)
+            valid_files = [
+                name
+                for name in loaded_meta
+                if name.lower().endswith(VIDEO_EXTENSIONS)
+            ]
+            valid_files.sort(key=lambda item: sort_key(item, loaded_meta), reverse=True)
+            return loaded_meta, valid_files
+
+        loaded_meta, valid_files = await asyncio.to_thread(_load)
         set_meta(loaded_meta)
-        valid_files.sort(key=lambda item: sort_key(item, loaded_meta), reverse=True)
         set_files(valid_files)
 
     async def load_data():
@@ -148,7 +153,7 @@ def LibraryView(
                 await sync_from_storage()
             except Exception:
                 pass
-        read_data()
+        await read_data_async()
 
     ft.use_effect(load_data, dependencies=[refresh_trigger])
 
@@ -157,7 +162,7 @@ def LibraryView(
             await asyncio.sleep(0.05)
             try:
                 await list_ref.current.scroll_to(offset=initial_scroll, duration=0)
-                list_ref.current.update()
+                # No manual .update() needed — Flet declarative reconciliation handles it
             except Exception:
                 pass
 
@@ -166,7 +171,7 @@ def LibraryView(
     async def confirm_delete():
         file_name = deleting_file
         set_deleting_file(None)
-        loaded_meta = load_metadata(metadata_path)
+        loaded_meta = await asyncio.to_thread(load_metadata, metadata_path)
         info = loaded_meta.get(file_name, {})
         source_path = info.get("source_path") or info.get("file_path") or ""
         deleted = False
@@ -189,8 +194,8 @@ def LibraryView(
             return
 
         loaded_meta.pop(file_name, None)
-        save_metadata(metadata_path, loaded_meta)
-        read_data()
+        await asyncio.to_thread(save_metadata, metadata_path, loaded_meta)
+        await read_data_async()
 
     ft.use_dialog(
         ft.AlertDialog(
