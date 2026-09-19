@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flet/flet.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:media_scanner/media_scanner.dart';
 
 class MediaScannerService extends FletService {
   static const MethodChannel _channel =
@@ -91,15 +90,20 @@ class MediaScannerService extends FletService {
     debugPrint("MediaScannerService._scanMedia: scanning '$path'");
 
     try {
-      await MediaScanner.loadMedia(path: path);
+      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        'scanMedia',
+        {'path': path},
+      );
+      final payload = Map<String, dynamic>.from(result ?? {});
+      final bool success = payload["success"] == true;
       debugPrint(
-          "MediaScannerService._scanMedia: media_scanner completed path='$path'");
+          "MediaScannerService._scanMedia: completed path='$path' success=$success");
       control.triggerEvent("scanned", {
         "path": path,
-        "success": "true",
-        "result": "scanned",
+        "success": success ? "true" : "false",
+        "result": success ? "scanned" : "failed",
       });
-      return "true";
+      return success ? "true" : "false";
     } catch (error, stack) {
       debugPrint(
           "MediaScannerService._scanMedia: ERROR '$path': $error\n$stack");

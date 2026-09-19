@@ -1,10 +1,10 @@
 [project]
 name = "flet-media-scanner"
-version = "0.86.1"
+version = "1.0.2"
 description = "Flet extension for Android MediaStore — scan, save, list, and delete videos in the Gallery"
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 authors = [
     { name = "Fazi-Gondal", email = "nextinpk@gmail.com" }
 ]
@@ -14,12 +14,11 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "flet>=0.86.0"
+    "flet>=1.0"
 ]
 
 [project.urls]
