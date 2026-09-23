@@ -150,6 +150,13 @@ Triggers Android native `MediaScannerConnection.scanFile` to index a file that a
 
 ---
 
+## Related Project
+
+If your application needs more comprehensive media library functionality such as **browsing albums, querying photos/videos/audio, thumbnails, permissions, media mutations, and live media change notifications**, see **[flet-media-library](https://github.com/fazi-gondal/Flet-media-library)**.
+
+`flet-media-scanner` is intentionally focused on Android `MediaStore` operations for saving, listing, deleting, and scanning videos.
+
+
 ## License
 
 [MIT](LICENSE)
