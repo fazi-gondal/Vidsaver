@@ -156,6 +156,17 @@ If your application needs more comprehensive media library functionality such as
 
 `flet-media-scanner` is intentionally focused on Android `MediaStore` operations for saving, listing, deleting, and scanning videos.
 
+## Used in Vidsaver
+
+`flet-media-scanner` is used in **[Vidsaver](https://github.com/fazi-gondal/Vidsaver)** to handle Android media-library operations for downloaded videos.
+
+Vidsaver uses the package to integrate downloaded media with Android's native **MediaStore**, allowing videos to be saved, scanned, listed, and managed without relying on a separate media-management layer.
+
+This makes `flet-media-scanner` part of a real-world Flet application and demonstrates how the package can be used for native Android media integration in production-style projects.
+
+**Vidsaver:** https://github.com/fazi-gondal/Vidsaver
+
+---
 
 ## License
 
