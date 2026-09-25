@@ -1,4 +1,4 @@
-"""Polished video card with real thumbnail when available."""
+"""Polished video card with thumbnail rendered from embedded base64 data."""
 
 from __future__ import annotations
 
@@ -26,30 +26,11 @@ def VideoCard(entry: VideoEntry, on_play, on_delete):
     size_str = f"{size / (1024 * 1024):.1f} MB" if size else ""
     name_without_ext = os.path.splitext(entry.display_name)[0]
 
-    thumb_src = ""
-    if entry.thumbnail_path and os.path.isfile(entry.thumbnail_path):
-        thumb_src = entry.thumbnail_path
-    elif entry.source_path:
-        stem = os.path.splitext(entry.source_path)[0]
-        for ext in (".jpg", ".jpeg", ".png", ".webp"):
-            candidate = stem + ext
-            if os.path.isfile(candidate):
-                thumb_src = candidate
-                break
-        if not thumb_src and os.path.isfile(stem + ".image"):
-            jpg_candidate = stem + ".jpg"
-            try:
-                import shutil
-                shutil.copy2(stem + ".image", jpg_candidate)
-                thumb_src = jpg_candidate
-            except Exception:
-                thumb_src = stem + ".image"
-
-    if thumb_src:
+    if entry.thumbnail_b64:
         thumb_body = ft.Stack(
             controls=[
                 ft.Image(
-                    src=thumb_src,
+                    src_base64=entry.thumbnail_b64,
                     width=80,
                     height=80,
                     fit=ft.BoxFit.COVER,

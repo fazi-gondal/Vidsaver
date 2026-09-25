@@ -172,7 +172,7 @@ def HomeRoute():
                 for path in result.paths:
                     file_name = os.path.basename(path)
                     size = os.path.getsize(path) if os.path.exists(path) else 0
-                    thumb = (result.thumbnails or {}).get(path, "")
+                    thumb_b64 = (result.thumbnails or {}).get(path, "")
                     entry = VideoEntry(
                         display_name=file_name,
                         platform=result.platform,
@@ -181,7 +181,7 @@ def HomeRoute():
                         created_at=time.time(),
                         source_path=path,
                         size=size,
-                        thumbnail_path=thumb,
+                        thumbnail_b64=thumb_b64,
                     )
                     try:
                         if ctx.media_store.ensure() is not None:

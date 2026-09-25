@@ -10,6 +10,7 @@ from typing import Any
 
 from vidsaver.models.video import VideoEntry
 from vidsaver.services.media_store import MediaStoreService
+from vidsaver.services.download_service import extract_thumbnail_b64
 
 
 def load_metadata(metadata_path: str) -> dict[str, Any]:
@@ -35,7 +36,9 @@ class LibraryService:
         self.metadata_path = metadata_path
         self.media_store = media_store
 
-    def _resolve_thumbnail(self, entry: VideoEntry) -> str:
+    def _get_thumbnail_b64(self, entry: VideoEntry) -> str:
+        """Extract a frame from the video file and return it as base64.
+        No file is ever written to disk."""
         candidates = []
         if entry.source_path:
             candidates.append(entry.source_path)
@@ -44,33 +47,10 @@ class LibraryService:
             candidates.append(os.path.join(meta_dir, entry.display_name))
 
         for video_path in candidates:
-            stem = os.path.splitext(video_path)[0]
-            for ext in (".jpg", ".jpeg", ".png", ".webp"):
-                candidate = stem + ext
-                if os.path.isfile(candidate):
-                    return candidate
-            if os.path.isfile(stem + ".image"):
-                jpg_path = stem + ".jpg"
-                try:
-                    import shutil
-                    shutil.copy2(stem + ".image", jpg_path)
-                    return jpg_path
-                except Exception:
-                    return stem + ".image"
             if os.path.isfile(video_path):
-                jpg_path = stem + ".jpg"
-                try:
-                    import subprocess
-                    res = subprocess.run(
-                        ["ffmpeg", "-y", "-ss", "00:00:01", "-i", video_path, "-vframes", "1", "-q:v", "2", jpg_path],
-                        capture_output=True,
-                        timeout=5,
-                        check=False,
-                    )
-                    if res.returncode == 0 and os.path.isfile(jpg_path) and os.path.getsize(jpg_path) > 0:
-                        return jpg_path
-                except Exception:
-                    pass
+                b64 = extract_thumbnail_b64(video_path)
+                if b64:
+                    return b64
         return ""
 
     def list_entries(self) -> list[VideoEntry]:
@@ -79,11 +59,11 @@ class LibraryService:
         entries: list[VideoEntry] = []
         for name, data in meta.items():
             entry = VideoEntry.from_dict(name, data)
-            if not entry.thumbnail_path or not os.path.isfile(entry.thumbnail_path):
-                recovered = self._resolve_thumbnail(entry)
-                if recovered:
-                    entry.thumbnail_path = recovered
-                    data["thumbnail_path"] = recovered
+            if not entry.thumbnail_b64:
+                b64 = self._get_thumbnail_b64(entry)
+                if b64:
+                    entry.thumbnail_b64 = b64
+                    data["thumbnail_b64"] = b64
                     changed = True
             entries.append(entry)
         if changed:

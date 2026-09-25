@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import base64
 import os
 import re
+import subprocess
 import sys
 import time
 from collections.abc import Callable
@@ -12,6 +14,34 @@ from datetime import datetime
 from vidsaver.config.constants import VIDEO_EXTENSIONS
 from vidsaver.models.video import DownloadResult
 from vidsaver.utils.paths import get_cookie_path
+
+
+def extract_thumbnail_b64(video_path: str, timestamp: str = "00:00:01") -> str:
+    """Extract a single frame from *video_path* via ffmpeg and return it as
+    a base64-encoded JPEG string.  Returns "" on any failure."""
+    if not os.path.isfile(video_path):
+        return ""
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-ss", timestamp,
+                "-i", video_path,
+                "-vframes", "1",
+                "-f", "image2",
+                "-vcodec", "mjpeg",
+                "pipe:1",   # write JPEG bytes to stdout
+            ],
+            capture_output=True,
+            timeout=8,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout:
+            return base64.b64encode(result.stdout).decode()
+    except Exception:
+        pass
+    return ""
 
 
 def detect_platform(url: str) -> str:
@@ -146,7 +176,8 @@ class DownloadService:
             "format": "b[ext=mp4]/b",
             "writesubtitles": False,
             "writeautomaticsub": False,
-            "writethumbnail": True,
+            # Thumbnails are extracted in-memory by ffmpeg — no separate file.
+            "writethumbnail": False,
             "noplaylist": True,
             "sleep_interval": 0,
             "max_sleep_interval": 0,
@@ -218,71 +249,15 @@ class DownloadService:
 
             staged_paths = [os.path.join(target_dir, fname) for fname in saved_files]
             mark_files_recent(staged_paths)
-            # Pair each video with a nearby thumbnail written by yt-dlp or fetched
+
+            # Extract one frame per video in-memory (no file written to disk)
+            status("Extracting thumbnails...")
             thumbs: dict[str, str] = {}
             for path in staged_paths:
-                stem = os.path.splitext(path)[0]
-                # 1. Check existing standard image extensions
-                for ext in (".jpg", ".jpeg", ".png", ".webp"):
-                    candidate = stem + ext
-                    if os.path.isfile(candidate):
-                        thumbs[path] = candidate
-                        break
+                b64 = extract_thumbnail_b64(path)
+                if b64:
+                    thumbs[path] = b64
 
-                # 2. Check if yt-dlp wrote a .image file (standard for TikTok CDN)
-                if path not in thumbs and os.path.isfile(stem + ".image"):
-                    jpg_candidate = stem + ".jpg"
-                    try:
-                        import shutil
-                        shutil.copy2(stem + ".image", jpg_candidate)
-                        thumbs[path] = jpg_candidate
-                    except Exception:
-                        thumbs[path] = stem + ".image"
-
-                # 3. If missing, attempt downloading from info metadata
-                if path not in thumbs and isinstance(info, dict):
-                    thumb_url = info.get("thumbnail")
-                    if not thumb_url and info.get("thumbnails"):
-                        thumb_url = info["thumbnails"][-1].get("url")
-                    if thumb_url:
-                        jpg_candidate = stem + ".jpg"
-                        try:
-                            import urllib.request
-                            req = urllib.request.Request(
-                                thumb_url,
-                                headers={
-                                    "User-Agent": (
-                                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                                        "Chrome/120.0.0.0 Safari/537.36"
-                                    ),
-                                    "Referer": "https://www.tiktok.com/",
-                                },
-                            )
-                            with urllib.request.urlopen(req, timeout=8) as resp:
-                                img_data = resp.read()
-                                if img_data:
-                                    with open(jpg_candidate, "wb") as f_img:
-                                        f_img.write(img_data)
-                                    thumbs[path] = jpg_candidate
-                        except Exception:
-                            pass
-
-                # 4. Fallback: extract frame using ffmpeg if available
-                if path not in thumbs and os.path.isfile(path):
-                    jpg_candidate = stem + ".jpg"
-                    try:
-                        import subprocess
-                        res = subprocess.run(
-                            ["ffmpeg", "-y", "-ss", "00:00:01", "-i", path, "-vframes", "1", "-q:v", "2", jpg_candidate],
-                            capture_output=True,
-                            timeout=5,
-                            check=False,
-                        )
-                        if res.returncode == 0 and os.path.isfile(jpg_candidate) and os.path.getsize(jpg_candidate) > 0:
-                            thumbs[path] = jpg_candidate
-                    except Exception:
-                        pass
             status("Publishing video...")
             return DownloadResult(
                 paths=staged_paths,
