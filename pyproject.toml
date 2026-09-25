@@ -1,0 +1,121 @@
+[project]
+name = "vidsaver"
+version = "1.5.0"
+description = "Cross-platform video downloader built with Flet 1.0 and yt-dlp — TikTok, Instagram, YouTube, and more."
+readme = "README.md"
+requires-python = ">=3.14"
+license = { text = "MIT" }
+authors = [
+    { name = "Fazi-Gondal", email = "nextinpk@gmail.com" }
+]
+keywords = [
+    "video-downloader",
+    "yt-dlp",
+    "flet",
+    "tiktok",
+    "instagram",
+    "youtube",
+    "android",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Video",
+]
+dependencies = [
+    "flet==1.0",
+    "flet-video==1.0",
+    "flet-media-scanner==1.0.2",
+    "yt-dlp",
+    "requests",
+    "certifi",
+    "charset-normalizer",
+    "idna",
+    "urllib3",
+]
+
+[project.urls]
+Homepage = "https://github.com/fazi-gondal/Vidsaver"
+Repository = "https://github.com/fazi-gondal/Vidsaver"
+Issues = "https://github.com/fazi-gondal/Vidsaver/issues"
+
+[dependency-groups]
+dev = [
+    "flet-cli==1.0",
+    "flet-desktop==1.0",
+    "flet-web==1.0",
+    "pytest>=8.0",
+    "ruff>=0.8",
+]
+
+[tool.flet]
+org = "com.fazi"
+product = "Vidsaver"
+company = "NextInPK"
+copyright = "Copyright (C) 2023-2026 by Fazi-Gondal"
+python_version = "3.14"
+
+[tool.flet.icons]
+android = "assets/icon.png"
+splash_android = "assets/splash_android.png"
+
+[tool.flet.app]
+path = "src"
+
+[tool.flet.android]
+split_per_abi = true
+target_arch = ["arm64-v8a"]
+dependencies = [
+    "certifi",
+    "charset-normalizer",
+    "idna",
+    "requests",
+    "urllib3",
+    "yt-dlp",
+    "flet-media-scanner",
+]
+
+[tool.flet.android.permission]
+"android.permission.INTERNET" = true
+
+[tool.flet.extensions]
+flet_media_scanner = "flet_media_scanner.Extension"
+
+[tool.flet.dev_packages]
+flet-media-scanner = "packages/flet-media-scanner"
+
+[tool.uv.sources]
+flet-media-scanner = { workspace = true }
+
+[tool.uv.workspace]
+members = ["packages/flet-media-scanner"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    "E501",
+    "B008",
+    "SIM105",
+    "SIM108",
+    "SIM117",
+    "UP015",
+    "UP037",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+"src/vidsaver/services/**" = ["BLE001", "S110"]
+"src/vidsaver/ui/**" = ["BLE001", "S110", "B904"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"

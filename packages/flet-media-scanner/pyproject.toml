@@ -1,0 +1,38 @@
+[project]
+name = "flet-media-scanner"
+version = "1.0.2"
+description = "Flet extension for Android MediaStore — scan, save, list, and delete videos in the Gallery"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.14"
+authors = [
+    { name = "Fazi-Gondal", email = "nextinpk@gmail.com" }
+]
+keywords = ["flet", "android", "media", "mediascanner", "gallery", "flutter"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "flet>=1.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/fazi-gondal/flet-media-scanner"
+Repository = "https://github.com/fazi-gondal/flet-media-scanner"
+"Bug Tracker" = "https://github.com/fazi-gondal/flet-media-scanner/issues"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["flet_media_scanner", "flutter.flet_media_scanner"]
+
+[tool.setuptools.package-data]
+"flutter.flet_media_scanner" = ["**/*"]

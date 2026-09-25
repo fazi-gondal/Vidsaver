@@ -1,0 +1,306 @@
+# docs: https://docs.flet.dev/publish/#github-actions
+
+name: Build & Release Vidsaver
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_PYTHON: "3.14"
+  PYTHONUTF8: "1"
+  FLET_CLI_NO_RICH_OUTPUT: "1"
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # -------- Windows --------
+          - name: windows
+            runner: windows-latest
+            build_cmd: "flet build windows --source-packages packages/flet-media-scanner"
+            artifact_path: "build/windows"
+            linux_deps: false
+
+          # -------- Android APK (arm64-v8a only) --------
+          - name: apk
+            runner: ubuntu-latest
+            build_cmd: "flet build apk --split-per-abi --arch arm64-v8a --source-packages packages/flet-media-scanner"
+            artifact_path: "build/apk"
+            linux_deps: false
+            android_signing: true
+
+          # -------- Disabled Builds --------
+          # Uncomment these targets when you need them again.
+
+          # - name: linux
+          #   runner: ubuntu-latest
+          #   build_cmd: "flet build linux"
+          #   artifact_path: "build/linux"
+          #   linux_deps: true
+
+          # - name: macos
+          #   runner: macos-latest
+          #   build_cmd: "flet build macos"
+          #   artifact_path: "build/macos"
+          #   linux_deps: false
+
+          # - name: aab
+          #   runner: ubuntu-latest
+          #   build_cmd: "flet build aab"
+          #   artifact_path: "build/aab"
+          #   linux_deps: false
+
+          # - name: ipa
+          #   runner: macos-latest
+          #   build_cmd: "flet build ipa"
+          #   artifact_path: "build/ipa"
+          #   linux_deps: false
+
+          # - name: web
+          #   runner: ubuntu-latest
+          #   build_cmd: "flet build web"
+          #   artifact_path: "build/web"
+          #   linux_deps: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            packages/flet-media-scanner/pyproject.toml
+            packages/flet-media-scanner/src/flet_media_scanner/**/*.py
+            packages/flet-media-scanner/src/flutter/flet_media_scanner/lib/**/*.dart
+            packages/flet-media-scanner/src/flutter/flet_media_scanner/android/**/*.gradle
+            packages/flet-media-scanner/src/flutter/flet_media_scanner/android/**/*.kt
+            packages/flet-media-scanner/src/flutter/flet_media_scanner/android/**/*.xml
+            packages/flet-media-scanner/src/flutter/flet_media_scanner/pubspec.yaml
+
+      - name: Install Linux dependencies
+        if: matrix.linux_deps
+        shell: bash
+        run: |
+          sudo apt update --allow-releaseinfo-change
+          sudo apt install -y --no-install-recommends \
+            clang \
+            ninja-build \
+            pkg-config \
+            libgtk-3-dev \
+            libasound2-dev \
+            libmpv-dev \
+            mpv \
+            libsecret-1-0 \
+            libsecret-1-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly \
+            gstreamer1.0-libav \
+            gstreamer1.0-tools \
+            gstreamer1.0-x \
+            gstreamer1.0-alsa \
+            gstreamer1.0-gl \
+            gstreamer1.0-gtk3 \
+            gstreamer1.0-pulseaudio
+
+      - name: Prepare Android signing key
+        if: matrix.android_signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${ANDROID_KEYSTORE_BASE64}" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 secret is required for signed Android releases." >&2
+            exit 1
+          fi
+
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > upload-keystore.jks
+
+      - name: Build application
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ "${{ matrix.android_signing }}" = "true" ]; then
+            if [ -z "${ANDROID_KEYSTORE_PASSWORD}" ] || [ -z "${ANDROID_KEY_PASSWORD}" ] || [ -z "${ANDROID_KEY_ALIAS}" ]; then
+              echo "ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_PASSWORD, and ANDROID_KEY_ALIAS secrets are required for signed Android releases." >&2
+              exit 1
+            fi
+
+            KEYSTORE_PATH="$(pwd)/upload-keystore.jks"
+
+            uv run ${{ matrix.build_cmd }} \
+              --android-signing-key-store "${KEYSTORE_PATH}" \
+              --android-signing-key-store-password "${ANDROID_KEYSTORE_PASSWORD}" \
+              --android-signing-key-password "${ANDROID_KEY_PASSWORD}" \
+              --android-signing-key-alias "${ANDROID_KEY_ALIAS}" \
+              --yes --verbose
+          else
+            uv run ${{ matrix.build_cmd }} --yes --verbose
+          fi
+
+      - name: Verify build output
+        shell: bash
+        run: |
+          ls -R "${{ matrix.artifact_path }}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-build
+          path: ${{ matrix.artifact_path }}
+          compression-level: 0
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Build Windows installer (Inno Setup)
+        if: matrix.name == 'windows'
+        shell: pwsh
+        run: |
+          # Detect the .exe produced by flet build windows
+          $exe = Get-ChildItem -Path build\windows -Filter *.exe -Recurse | Select-Object -First 1
+          if (-not $exe) { Write-Error 'No .exe found in build/windows'; exit 1 }
+          $appExe  = $exe.Name
+          Write-Host "Detected EXE: $appExe"
+
+          # Parse version from tag (v1.2.3 -> 1.2.3), fall back to 1.0.0
+          $tag     = "${{ github.ref_name }}"
+          $version = if ($tag) { $tag.TrimStart('v') } else { '1.0.0' }
+
+          # Locate ISCC.exe
+          $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+          if (-not $iscc) {
+            $iscc = Get-ChildItem 'C:\Program Files (x86)\Inno Setup*\ISCC.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $iscc) { Write-Error 'Inno Setup (ISCC.exe) not found'; exit 1 }
+
+          $issPath = (Resolve-Path 'packages\windows\installer.iss').Path
+          & $iscc.Source `
+            /DAppExe=$appExe `
+            /DAppVersion=$version `
+            /DAppArch=x64 `
+            $issPath
+
+          if ($LASTEXITCODE -ne 0) { Write-Error "ISCC failed with code $LASTEXITCODE"; exit 1 }
+          Write-Host "Installer built successfully."
+
+      - name: Upload Windows installer artifact
+        if: matrix.name == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: build/Vidsaver-windows-x64-setup.exe
+          compression-level: 0
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 30
+
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Show downloaded artifacts
+        shell: bash
+        run: |
+          ls -R artifacts
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir release
+          VERSION="${GITHUB_REF_NAME}"
+
+          if [ -d "artifacts/windows-build" ]; then
+            (cd artifacts && zip -9 -r "../release/Vidsaver-${VERSION}-Windows.zip" windows-build)
+          else
+            echo "Missing Windows build artifact." >&2
+            exit 1
+          fi
+
+          SETUP_EXE="$(find artifacts/windows-installer -type f -name "*.exe" 2>/dev/null | head -n 1)"
+          if [ -n "${SETUP_EXE}" ]; then
+            cp "${SETUP_EXE}" "release/Vidsaver-${VERSION}-Windows-setup.exe"
+          else
+            echo "Missing Windows installer artifact." >&2
+            exit 1
+          fi
+
+          if [ ! -d "artifacts/apk-build" ]; then
+            echo "Missing Android APK artifact." >&2
+            exit 1
+          fi
+
+          APK="$(find artifacts/apk-build -type f -name "*arm64-v8a*.apk" | head -n 1)"
+          if [ -n "${APK}" ]; then
+            cp "${APK}" "release/Vidsaver-${VERSION}-Android-arm64-v8a.apk"
+            zip -9 "release/Vidsaver-${VERSION}-Android-arm64-v8a.zip" "${APK}"
+          else
+            echo "Missing Android arm64-v8a APK artifact." >&2
+            find artifacts/apk-build -type f -name "*.apk" -print >&2
+            exit 1
+          fi
+
+          ls -lh release
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/Vidsaver-${{ github.ref_name }}-Windows.zip
+            release/Vidsaver-${{ github.ref_name }}-Windows-setup.exe
+            release/Vidsaver-${{ github.ref_name }}-Android-arm64-v8a.apk
+            release/Vidsaver-${{ github.ref_name }}-Android-arm64-v8a.zip
+
+      - name: Upload release assets as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: release
+          overwrite: true
+          compression-level: 0

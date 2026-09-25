@@ -1,0 +1,11 @@
+interface:
+  display_name: "Flet Extension Workflow"
+  short_description: "Guided workflow to create a Flet extension package (Service or UI Control)."
+  brand_color: "#4ADE80"
+  default_prompt: |
+    Run a guided, phased workflow to wrap a Flutter package into a Flet extension.
+    Confirm extension type (Service vs UI), plan the API, scaffold, review generated code,
+    customize Python/Dart, test with an example app, then publish.
+policy:
+  allow_implicit_invocation: true
+
