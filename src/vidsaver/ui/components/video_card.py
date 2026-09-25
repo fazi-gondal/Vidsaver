@@ -1,4 +1,4 @@
-"""Polished video card with thumbnail rendered from embedded base64 data."""
+"""Polished video card with real thumbnail when available."""
 
 from __future__ import annotations
 
@@ -26,11 +26,14 @@ def VideoCard(entry: VideoEntry, on_play, on_delete):
     size_str = f"{size / (1024 * 1024):.1f} MB" if size else ""
     name_without_ext = os.path.splitext(entry.display_name)[0]
 
-    if entry.thumbnail_b64:
+    # Thumbnail is stored in the app's private data dir — never in the gallery
+    has_thumb = bool(entry.thumbnail_path and os.path.isfile(entry.thumbnail_path))
+
+    if has_thumb:
         thumb_body = ft.Stack(
             controls=[
                 ft.Image(
-                    src_base64=entry.thumbnail_b64,
+                    src=entry.thumbnail_path,
                     width=80,
                     height=80,
                     fit=ft.BoxFit.COVER,

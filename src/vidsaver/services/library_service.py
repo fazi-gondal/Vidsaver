@@ -10,7 +10,7 @@ from typing import Any
 
 from vidsaver.models.video import VideoEntry
 from vidsaver.services.media_store import MediaStoreService
-from vidsaver.services.download_service import extract_thumbnail_b64
+from vidsaver.utils.paths import get_thumbnails_dir
 
 
 def load_metadata(metadata_path: str) -> dict[str, Any]:
@@ -36,21 +36,40 @@ class LibraryService:
         self.metadata_path = metadata_path
         self.media_store = media_store
 
-    def _get_thumbnail_b64(self, entry: VideoEntry) -> str:
-        """Extract a frame from the video file and return it as base64.
-        No file is ever written to disk."""
+    def _find_thumbnail_in_private_dir(self, display_name: str) -> str:
+        """Look for an existing thumbnail in the private thumbnails directory."""
+        try:
+            thumbs_dir = get_thumbnails_dir()
+            stem = os.path.splitext(display_name)[0]
+            candidate = os.path.join(thumbs_dir, stem + ".jpg")
+            if os.path.isfile(candidate):
+                return candidate
+        except Exception:
+            pass
+        return ""
+
+    def _move_stray_thumbnail(self, entry: VideoEntry) -> str:
+        """If a thumbnail still exists next to the video (legacy), move it to
+        the private dir and return the new private path."""
+        import shutil
         candidates = []
         if entry.source_path:
             candidates.append(entry.source_path)
-        meta_dir = os.path.dirname(self.metadata_path)
-        if meta_dir:
-            candidates.append(os.path.join(meta_dir, entry.display_name))
 
         for video_path in candidates:
-            if os.path.isfile(video_path):
-                b64 = extract_thumbnail_b64(video_path)
-                if b64:
-                    return b64
+            stem = os.path.splitext(video_path)[0]
+            for ext in (".jpg", ".jpeg", ".png", ".webp", ".image"):
+                candidate = stem + ext
+                if os.path.isfile(candidate):
+                    try:
+                        thumbs_dir = get_thumbnails_dir()
+                        base = os.path.basename(stem)
+                        dest = os.path.join(thumbs_dir, base + ".jpg")
+                        shutil.copy2(candidate, dest)
+                        os.remove(candidate)
+                        return dest
+                    except Exception:
+                        pass
         return ""
 
     def list_entries(self) -> list[VideoEntry]:
@@ -59,12 +78,19 @@ class LibraryService:
         entries: list[VideoEntry] = []
         for name, data in meta.items():
             entry = VideoEntry.from_dict(name, data)
-            if not entry.thumbnail_b64:
-                b64 = self._get_thumbnail_b64(entry)
-                if b64:
-                    entry.thumbnail_b64 = b64
-                    data["thumbnail_b64"] = b64
-                    changed = True
+            # Validate existing thumbnail path
+            if entry.thumbnail_path and os.path.isfile(entry.thumbnail_path):
+                entries.append(entry)
+                continue
+            # Try private dir by display name
+            private = self._find_thumbnail_in_private_dir(entry.display_name)
+            if not private:
+                # Try to migrate a stray file sitting next to the video
+                private = self._move_stray_thumbnail(entry)
+            if private:
+                entry.thumbnail_path = private
+                data["thumbnail_path"] = private
+                changed = True
             entries.append(entry)
         if changed:
             save_metadata(self.metadata_path, meta)
@@ -136,5 +162,11 @@ class LibraryService:
             deleted = not entry.content_uri and not entry.source_path
 
         if deleted:
+            # Also remove the private thumbnail
+            if entry.thumbnail_path and os.path.isfile(entry.thumbnail_path):
+                try:
+                    os.remove(entry.thumbnail_path)
+                except Exception:
+                    pass
             self.remove(entry.display_name)
         return deleted

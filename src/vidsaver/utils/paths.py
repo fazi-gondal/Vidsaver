@@ -41,6 +41,18 @@ def ensure_storage_paths(page: ft.Page) -> tuple[str, str]:
     return download_dir, metadata_path
 
 
+def get_thumbnails_dir() -> str:
+    """Return the app-private thumbnails directory (never scanned by the gallery).
+
+    Stored inside FLET_APP_STORAGE_DATA alongside metadata.json so it is
+    invisible to Android MediaStore / Windows Explorer photo views.
+    """
+    data_dir = os.environ.get("FLET_APP_STORAGE_DATA") or os.getcwd()
+    thumb_dir = os.path.join(data_dir, "thumbnails")
+    os.makedirs(thumb_dir, exist_ok=True)
+    return thumb_dir
+
+
 def get_cookie_path() -> str:
     """Path to cookies.txt (next to the app entry or in data dir)."""
     # Prefer the traditional location used by the original project

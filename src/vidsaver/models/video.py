@@ -21,8 +21,8 @@ class VideoEntry:
     mime_type: str = "video/mp4"
     relative_path: str = "Movies/Vidsaver"
     size: int = 0
-    # Base64-encoded JPEG thumbnail — no separate image file needed
-    thumbnail_b64: str = ""
+    # Path to thumbnail image stored in the app's private data dir (not gallery)
+    thumbnail_path: str = ""
 
     @classmethod
     def from_dict(cls, name: str, data: dict[str, Any]) -> VideoEntry:
@@ -38,7 +38,7 @@ class VideoEntry:
             mime_type=data.get("mime_type") or "video/mp4",
             relative_path=data.get("relative_path") or "Movies/Vidsaver",
             size=int(data.get("size") or 0),
-            thumbnail_b64=data.get("thumbnail_b64") or "",
+            thumbnail_path=data.get("thumbnail_path") or "",
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -54,7 +54,7 @@ class VideoEntry:
             "relative_path": self.relative_path,
             "size": self.size,
             "display_name": self.display_name,
-            "thumbnail_b64": self.thumbnail_b64,
+            "thumbnail_path": self.thumbnail_path,
         }
 
     @property
@@ -71,7 +71,7 @@ class DownloadResult:
     url: str = ""
     date: str = ""
     error: str = ""
-    # Map of video path -> base64-encoded JPEG thumbnail
+    # Map of video path -> private thumbnail path
     thumbnails: dict[str, str] = field(default_factory=dict)
 
     @property

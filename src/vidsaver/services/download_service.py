@@ -2,43 +2,63 @@
 
 from __future__ import annotations
 
-import base64
 import os
 import re
-import subprocess
+import shutil
 import sys
 import time
+import urllib.request
 from collections.abc import Callable
 from datetime import datetime
 
 from vidsaver.config.constants import VIDEO_EXTENSIONS
 from vidsaver.models.video import DownloadResult
-from vidsaver.utils.paths import get_cookie_path
+from vidsaver.utils.paths import get_cookie_path, get_thumbnails_dir
 
 
-def extract_thumbnail_b64(video_path: str, timestamp: str = "00:00:01") -> str:
-    """Extract a single frame from *video_path* via ffmpeg and return it as
-    a base64-encoded JPEG string.  Returns "" on any failure."""
-    if not os.path.isfile(video_path):
-        return ""
+def save_thumbnail_to_private(video_stem: str, thumb_src: str) -> str:
+    """Copy *thumb_src* (any image file) into the app-private thumbnails dir.
+
+    Returns the new private path, or "" on failure.
+    The thumbnails dir lives in FLET_APP_STORAGE_DATA — not in Downloads —
+    so it is never scanned by Android MediaStore or Windows photo viewers.
+    """
     try:
-        result = subprocess.run(
-            [
-                "ffmpeg",
-                "-y",
-                "-ss", timestamp,
-                "-i", video_path,
-                "-vframes", "1",
-                "-f", "image2",
-                "-vcodec", "mjpeg",
-                "pipe:1",   # write JPEG bytes to stdout
-            ],
-            capture_output=True,
-            timeout=8,
-            check=False,
+        thumbs_dir = get_thumbnails_dir()
+        base = os.path.basename(video_stem)
+        dest = os.path.join(thumbs_dir, base + ".jpg")
+        shutil.copy2(thumb_src, dest)
+        return dest
+    except Exception:
+        return ""
+
+
+def fetch_thumbnail_from_url(thumb_url: str, video_stem: str) -> str:
+    """Download thumbnail from URL and save to the private thumbnails dir.
+
+    Returns the saved path, or "" on failure.
+    """
+    try:
+        thumbs_dir = get_thumbnails_dir()
+        base = os.path.basename(video_stem)
+        dest = os.path.join(thumbs_dir, base + ".jpg")
+        req = urllib.request.Request(
+            thumb_url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+                "Referer": "https://www.tiktok.com/",
+            },
         )
-        if result.returncode == 0 and result.stdout:
-            return base64.b64encode(result.stdout).decode()
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            img_data = resp.read()
+            if img_data:
+                with open(dest, "wb") as f:
+                    f.write(img_data)
+                return dest
     except Exception:
         pass
     return ""
@@ -176,8 +196,8 @@ class DownloadService:
             "format": "b[ext=mp4]/b",
             "writesubtitles": False,
             "writeautomaticsub": False,
-            # Thumbnails are extracted in-memory by ffmpeg — no separate file.
-            "writethumbnail": False,
+            # Let yt-dlp write thumbnails next to the video so we can move them
+            "writethumbnail": True,
             "noplaylist": True,
             "sleep_interval": 0,
             "max_sleep_interval": 0,
@@ -250,13 +270,45 @@ class DownloadService:
             staged_paths = [os.path.join(target_dir, fname) for fname in saved_files]
             mark_files_recent(staged_paths)
 
-            # Extract one frame per video in-memory (no file written to disk)
-            status("Extracting thumbnails...")
+            # Move thumbnails from the Downloads folder → private app dir so they
+            # never appear in the gallery.  Falls back to fetching from the URL.
+            status("Saving thumbnails...")
             thumbs: dict[str, str] = {}
             for path in staged_paths:
-                b64 = extract_thumbnail_b64(path)
-                if b64:
-                    thumbs[path] = b64
+                stem = os.path.splitext(path)[0]
+                thumb_src = ""
+
+                # 1. yt-dlp standard image extensions
+                for ext in (".jpg", ".jpeg", ".png", ".webp"):
+                    candidate = stem + ext
+                    if os.path.isfile(candidate):
+                        thumb_src = candidate
+                        break
+
+                # 2. TikTok CDN often uses .image extension
+                if not thumb_src and os.path.isfile(stem + ".image"):
+                    thumb_src = stem + ".image"
+
+                if thumb_src:
+                    private_path = save_thumbnail_to_private(stem, thumb_src)
+                    # Delete the public copy so it is not visible in the gallery
+                    try:
+                        os.remove(thumb_src)
+                    except Exception:
+                        pass
+                    if private_path:
+                        thumbs[path] = private_path
+                        continue
+
+                # 3. Fallback: fetch directly from yt-dlp metadata URL
+                if isinstance(info, dict):
+                    thumb_url = info.get("thumbnail")
+                    if not thumb_url and info.get("thumbnails"):
+                        thumb_url = info["thumbnails"][-1].get("url")
+                    if thumb_url:
+                        private_path = fetch_thumbnail_from_url(thumb_url, stem)
+                        if private_path:
+                            thumbs[path] = private_path
 
             status("Publishing video...")
             return DownloadResult(
