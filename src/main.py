@@ -338,7 +338,7 @@ def HomeView(
                 ft.Text(value=status_text_val, color=ft.Colors.BLUE_GREY, size=12),
                 ft.Container(height=40),
                 ft.Text(
-                    "Vidsaver made with love by Fazi Gondal",
+                    "Vidsaver made with love by Nisar Gondal",
                     size=16,
                     color=ft.Colors.BLUE_GREY,
                     text_align=ft.TextAlign.CENTER,
