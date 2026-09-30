@@ -123,15 +123,15 @@ The main release workflow is:
 It runs only when a version tag is pushed:
 
 ```bash
-git tag v1.4.0
-git push origin v1.4.0
+git tag v1.4.1
+git push origin v1.4.1
 ```
 
 To delete a tag locally and remotely (if you need to recreate/re-tag):
 
 ```bash
-git tag -d v1.4.0
-git push origin :refs/tags/v1.4.0
+git tag -d v1.4.1
+git push origin :refs/tags/v1.4.1
 ```
 
 Normal pushes to `main` do not trigger the release build.
