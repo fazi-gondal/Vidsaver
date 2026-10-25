@@ -8,7 +8,7 @@ authors = [{ name = "Fazi-Gondal", email = "nextinpk@gmail.com" }]
 dependencies = [
     "flet==1.0",
     "flet-video==1.0",
-    "flet-media-scanner==1.0.2",
+    "flet-media-scanner==1.0.3",
     "yt-dlp",
     "requests",
     "certifi",

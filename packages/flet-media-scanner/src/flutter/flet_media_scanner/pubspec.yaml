@@ -1,6 +1,6 @@
 name: flet_media_scanner
 description: Flet extension for Android MediaStore saving with media scanner fallback.
-version: 1.0.2
+version: 1.0.3
 publish_to: none
 
 environment:
