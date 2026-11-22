@@ -20,7 +20,7 @@ Built with **100% native Android Kotlin** (`MediaStore` & `MediaScannerConnectio
 
 - **Platform**: Android only (no-op / unsupported on desktop & iOS)
 - **Android**: API 21+ (minSdk 21; Scoped Storage optimized for API 29+)
-- **Flet**: `>= 1.0.0`
+- **Flet**: `>= 1.1.2`
 - **Python**: `>= 3.10`
 
 ---

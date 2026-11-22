@@ -38,9 +38,9 @@ Vidsaver is a cross-platform video downloader built with **Python 3.14** and **F
 ## Tech Stack
 
 - Python 3.14
-- Flet 1.0
-- flet-video 1.0
-- [flet-media-scanner](https://pypi.org/project/flet-media-scanner/) 1.0.2 (custom PyPI extension)
+- Flet 1.1.2
+- flet-video 1.1.2
+- [flet-media-scanner](https://pypi.org/project/flet-media-scanner/) 1.0.3 (custom PyPI extension)
 - yt-dlp
 - requests
 - uv

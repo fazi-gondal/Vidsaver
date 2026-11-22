@@ -5,9 +5,7 @@ description = "Flet extension for Android MediaStore — scan, save, list, and d
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
-authors = [
-    { name = "Fazi-Gondal", email = "nextinpk@gmail.com" }
-]
+authors = [{ name = "Fazi-Gondal", email = "nextinpk@gmail.com" }]
 keywords = ["flet", "android", "media", "mediascanner", "gallery", "flutter"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -21,9 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = [
-    "flet>=1.0"
-]
+dependencies = ["flet>=1.1.2"]
 
 [project.urls]
 Homepage = "https://github.com/fazi-gondal/flet-media-scanner"
@@ -35,7 +31,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 packages = ["flet_media_scanner", "flutter.flet_media_scanner"]
 
 [tool.setuptools.package-data]
