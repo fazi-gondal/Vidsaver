@@ -141,9 +141,47 @@ jobs:
 
           printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > upload-keystore.jks
 
+      - name: Configure Gradle and prefetch Android Python runtime
+        if: matrix.name == 'apk' || matrix.name == 'aab'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Prevent Gradle parallel execution from corrupting download-task etags cache
+          mkdir -p ~/.gradle
+          cat << 'EOF' > ~/.gradle/gradle.properties
+          org.gradle.parallel=false
+          org.gradle.workers.max=1
+          org.gradle.vfs.watch=false
+          EOF
+
+          # Prefetch Serious Python Android dist archives and dart-bridge libraries
+          # into ~/.flet/cache so Gradle download-task does not fail on concurrent downloads or timeouts.
+          CACHE_DIR="${HOME}/.flet/cache"
+          PY_VER="3.14.10"
+          PY_DATE="20261027"
+          BRIDGE_VER="1.11.0"
+
+          mkdir -p "${CACHE_DIR}/python-build/v${PY_VER}"
+          mkdir -p "${CACHE_DIR}/dart-bridge/v${BRIDGE_VER}"
+
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            echo "Prefetching runtime for ${abi}..."
+            curl -fsSL --retry 5 --retry-delay 3 \
+              "https://github.com/flet-dev/python-build/releases/download/${PY_DATE}/python-android-dart-${PY_VER}-${abi}.tar.gz" \
+              -o "${CACHE_DIR}/python-build/v${PY_VER}/python-android-dart-${PY_VER}-${abi}.tar.gz"
+            curl -fsSL --retry 5 --retry-delay 3 \
+              "https://github.com/flet-dev/dart-bridge/releases/download/v${BRIDGE_VER}/libdart_bridge-android-${abi}-py3.14.so" \
+              -o "${CACHE_DIR}/dart-bridge/v${BRIDGE_VER}/libdart_bridge-android-${abi}-py3.14.so"
+          done
+
+          ls -lh "${CACHE_DIR}/python-build/v${PY_VER}"
+          ls -lh "${CACHE_DIR}/dart-bridge/v${BRIDGE_VER}"
+
       - name: Build application
         shell: bash
         env:
+          GRADLE_OPTS: "-Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1"
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
