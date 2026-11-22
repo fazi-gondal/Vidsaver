@@ -42,8 +42,10 @@ def is_video_url(text: str) -> bool:
 
 
 def ensure_storage_paths(page: ft.Page):
-    if getattr(page, "_download_dir", None):
-        return page._download_dir, page._metadata_path
+    download_dir = getattr(page, "_download_dir", None)
+    metadata_path = getattr(page, "_metadata_path", None)
+    if download_dir and metadata_path:
+        return download_dir, metadata_path
 
     # FLET_APP_STORAGE_DATA is the writable data dir in built apps and flet run
     # (0.86+: app bundle is read-only, cwd = data dir in both modes)
@@ -61,22 +63,30 @@ def ensure_storage_paths(page: ft.Page):
         )
 
     os.makedirs(download_dir, exist_ok=True)
-    page._download_dir = download_dir
-    page._metadata_path = metadata_path
+    setattr(page, "_download_dir", download_dir)
+    setattr(page, "_metadata_path", metadata_path)
     return download_dir, metadata_path
 
 
 async def init_storage_paths(page: ft.Page):
     """Initialize stable metadata and temporary staging paths."""
-    if getattr(page, "_download_dir", None):
-        return page._download_dir, page._metadata_path
+    download_dir = getattr(page, "_download_dir", None)
+    metadata_path = getattr(page, "_metadata_path", None)
+    if download_dir and metadata_path:
+        return download_dir, metadata_path
 
     # FLET_APP_STORAGE_DATA is the writable data dir in both built apps and
     # flet run dev mode (0.86+: app bundle is read-only; cwd = data dir).
     data_dir = os.environ.get("FLET_APP_STORAGE_DATA") or os.getcwd()
     if is_android_page(page):
         try:
-            temp_dir = await page.storage_paths.get_temporary_directory()
+            storage_paths = getattr(page, "storage_paths", None)
+            if storage_paths:
+                temp_dir = await storage_paths.get_temporary_directory()
+            else:
+                sp = ft.StoragePaths()
+                page.services.append(sp)
+                temp_dir = await sp.get_temporary_directory()
         except Exception:
             temp_dir = tempfile.gettempdir()
         metadata_path = os.path.join(data_dir, "metadata.json")
@@ -93,19 +103,19 @@ async def init_storage_paths(page: ft.Page):
 
     os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
     os.makedirs(download_dir, exist_ok=True)
-    page._download_dir = download_dir
-    page._metadata_path = metadata_path
+    setattr(page, "_download_dir", download_dir)
+    setattr(page, "_metadata_path", metadata_path)
     return download_dir, metadata_path
 
 
 def ensure_media_scanner(page: ft.Page):
     """Initialize the local media service on Android only."""
     if hasattr(page, "_media_scanner"):
-        return page._media_scanner
+        return getattr(page, "_media_scanner")
 
     if not is_android_page(page):
-        page._media_scanner = None
-        page._media_scanner_error = ""
+        setattr(page, "_media_scanner", None)
+        setattr(page, "_media_scanner_error", "")
         return None
 
     try:
@@ -113,23 +123,25 @@ def ensure_media_scanner(page: ft.Page):
 
         scanner = MediaScanner()
         page.services.append(scanner)
-        page._media_scanner = scanner
-        page._media_scanner_error = ""
+        setattr(page, "_media_scanner", scanner)
+        setattr(page, "_media_scanner_error", "")
         page.update()
         print("[VidSaver] MediaStore service initialized")
     except Exception as e:
-        page._media_scanner_error = str(e)
+        setattr(page, "_media_scanner_error", str(e))
         print(f"[VidSaver] MediaStore service init failed: {e}")
-        page._media_scanner = None
+        setattr(page, "_media_scanner", None)
 
-    return page._media_scanner
+    return getattr(page, "_media_scanner")
 
 
 def get_clipboard(page: ft.Page) -> ft.Clipboard:
     """Return a stable Clipboard service instance (created once per session)."""
-    if not hasattr(page, "_clipboard"):
-        page._clipboard = ft.Clipboard()
-    return page._clipboard
+    clipboard = getattr(page, "_clipboard", None)
+    if clipboard is None:
+        clipboard = ft.Clipboard()
+        setattr(page, "_clipboard", clipboard)
+    return clipboard
 
 
 async def publish_download_result(page: ft.Page, download_result: dict, metadata_path: str):
@@ -475,8 +487,9 @@ def App(page: ft.Page):
                 except Exception as exc:
                     ok, error = False, str(exc)
                 if ok:
+                    engine = (download_result or {}).get("engine", "yt-dlp")
                     set_download_completed(True)
-                    set_status_text("Video saved to Gallery.")
+                    set_status_text(f"Video saved to Gallery ({engine}).")
                     is_done = True
                 else:
                     set_download_completed(False)

@@ -312,11 +312,13 @@ def run_download(
                 if fallback_files:
                     mark_files_recent(fallback_files)
                     on_status("Publishing video to Gallery...")
+                    print("[VidSaver] Download succeeded via Backup HD API (fallback)")
                     return {
                         "paths": fallback_files,
                         "platform": "TikTok",
                         "url": url,
                         "date": datetime.now().strftime("%d %b %Y"),
+                        "engine": "Backup HD API",
                     }
             on_error(
                 "No video file was saved. Instagram may require fresh cookies, "
@@ -327,11 +329,13 @@ def run_download(
         staged_paths = [os.path.join(target_dir, fname) for fname in saved_files]
         mark_files_recent(staged_paths)
         on_status("Publishing video to Gallery...")
+        print("[VidSaver] Download succeeded via yt-dlp")
         return {
             "paths": staged_paths,
             "platform": detect_platform(url),
             "url": url,
             "date": datetime.now().strftime("%d %b %Y"),
+            "engine": "yt-dlp",
         }
     except Exception as exc:
         err_msg = str(exc)
@@ -342,11 +346,13 @@ def run_download(
             if fallback_files:
                 mark_files_recent(fallback_files)
                 on_status("Publishing video to Gallery...")
+                print("[VidSaver] Download succeeded via Backup HD API (fallback)")
                 return {
                     "paths": fallback_files,
                     "platform": "TikTok",
                     "url": url,
                     "date": datetime.now().strftime("%d %b %Y"),
+                    "engine": "Backup HD API",
                 }
 
         if "timed out" in err_msg.lower():
