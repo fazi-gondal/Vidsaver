@@ -6,8 +6,8 @@ readme = "README.md"
 requires-python = ">=3.14"
 authors = [{ name = "Fazi-Gondal", email = "nextinpk@gmail.com" }]
 dependencies = [
-    "flet==1.0",
-    "flet-video==1.0",
+    "flet==1.1.2",
+    "flet-video==1.1.2",
     "flet-media-scanner==1.0.3",
     "yt-dlp",
     "requests",
@@ -18,7 +18,11 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["flet-cli==1.0", "flet-desktop==1.0", "flet-web==1.0"]
+dev = [
+    "flet-cli==1.1.2",
+    "flet-desktop==1.1.2",
+    "flet-web==1.1.2",
+]
 
 [tool.flet]
 org = "com.fazi"
