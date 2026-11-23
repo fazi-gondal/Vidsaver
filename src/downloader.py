@@ -8,6 +8,7 @@ from datetime import datetime
 import json
 import os
 import re
+import shutil
 import sys
 import time
 from typing import Any
@@ -236,21 +237,29 @@ def run_download(
 
     os.makedirs(target_dir, exist_ok=True)
 
+    has_ffmpeg = shutil.which("ffmpeg") is not None
+    # On mobile or systems without ffmpeg, always request pre-muxed video (b[ext=mp4]/b)
+    # so yt-dlp downloads the complete HD video directly without requiring an ffmpeg merge pass.
+    if has_ffmpeg:
+        format_spec = "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b/best"
+    else:
+        format_spec = "b[ext=mp4]/b"
+
     ydl_opts: Any = {
         "outtmpl": os.path.join(target_dir, "%(title).100s.%(ext)s"),
         "progress_hooks": [_hook],
         "cookiefile": cookie_path,
         "updatetime": False,
-        "format": "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b/best",
+        "format": format_spec,
         "writesubtitles": False,
         "writeautomaticsub": False,
         "writethumbnail": False,
         "noplaylist": True,
         "sleep_interval": 0,
         "max_sleep_interval": 0,
-        "socket_timeout": 10,
-        "retries": 2,
-        "fragment_retries": 2,
+        "socket_timeout": 15,
+        "retries": 3,
+        "fragment_retries": 3,
         "concurrent_fragment_downloads": 4,
         "quiet": True,
         "no_warnings": True,
