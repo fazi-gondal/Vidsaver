@@ -23,12 +23,8 @@ dev = [
     "flet-desktop==1.1.2",
     "flet-web==1.1.2",
 ]
-# Phase 1 PoCs — do NOT enable in production until device tests pass.
-# Usage: uv sync --group phase1-ffmpeg   or   --group phase1-notifications
-phase1-ffmpeg = [
-    "flet-libffmpeg",
-    "av",
-]
+# Phase 1 notification PoC — do NOT enable in production until device tests pass.
+# Usage: uv sync --group phase1-notifications
 phase1-notifications = [
     "flet-notifications==1.1.2",
 ]

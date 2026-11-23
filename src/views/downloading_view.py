@@ -17,6 +17,7 @@ def DownloadingView(
     tasks: list[DownloadTask] | None = None,
     on_cancel=None,
     on_retry=None,
+    on_details=None,
     active_count: int = 0,
     queued_count: int = 0,
 ):
@@ -43,7 +44,13 @@ def DownloadingView(
             )
         )
         sections.extend(
-            DownloadTaskCard(task=t, on_cancel=on_cancel, on_retry=on_retry) for t in active
+            DownloadTaskCard(
+                task=t,
+                on_cancel=on_cancel,
+                on_retry=on_retry,
+                on_details=on_details,
+            )
+            for t in active
         )
     if done:
         sections.append(
@@ -55,7 +62,13 @@ def DownloadingView(
             )
         )
         sections.extend(
-            DownloadTaskCard(task=t, on_cancel=on_cancel, on_retry=on_retry) for t in done[:20]
+            DownloadTaskCard(
+                task=t,
+                on_cancel=on_cancel,
+                on_retry=on_retry,
+                on_details=on_details,
+            )
+            for t in done[:20]
         )
 
     return ft.Container(

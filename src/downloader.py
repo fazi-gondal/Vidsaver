@@ -201,7 +201,6 @@ def analyze_media(url: str, cookie_path: str) -> dict | None:
     ydl_opts: Any = {
         "quiet": True,
         "no_warnings": True,
-        **({"ratelimit": rate_limit} if rate_limit else {}),
         "skip_download": True,
         "noplaylist": not is_likely_playlist,
         "socket_timeout": 15,
@@ -358,6 +357,12 @@ def run_download(
     concurrent_fragments: int | None = None,
     rate_limit: str | None = None,
     writesubtitles: bool = False,
+    subtitle_langs: str = "en",
+    timeout_seconds: int = 30,
+    audio_format: str = "m4a",
+    embed_thumbnail: bool = True,
+    embed_metadata: bool = True,
+    keep_originals: bool = False,
 ):
     """
     Execute a yt-dlp download synchronously in a worker thread.
@@ -428,11 +433,18 @@ def run_download(
         or "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b/best",
         "writesubtitles": bool(writesubtitles),
         "writeautomaticsub": bool(writesubtitles),
-        "writethumbnail": False,
+        "writethumbnail": bool(embed_thumbnail),
+        "embedthumbnail": bool(embed_thumbnail),
+        "subtitleslangs": [
+            value.strip()
+            for value in str(subtitle_langs or "en").split(",")
+            if value.strip()
+        ],
+        "keepvideo": bool(keep_originals),
         "noplaylist": True,
         "sleep_interval": 0,
         "max_sleep_interval": 0,
-        "socket_timeout": 10,
+        "socket_timeout": max(5, min(300, int(timeout_seconds or 30))),
         "retries": retries if retries is not None else 2,
         "fragment_retries": retries if retries is not None else 2,
         "concurrent_fragment_downloads": concurrent_fragments if concurrent_fragments is not None else 4,
@@ -452,6 +464,24 @@ def run_download(
             "Accept-Language": "en-US,en;q=0.5",
         },
     }
+    postprocessors: list[dict] = []
+    if embed_metadata:
+        postprocessors.append({"key": "FFmpegMetadata"})
+    if embed_thumbnail:
+        postprocessors.append(
+            {"key": "EmbedThumbnail", "already_have_thumbnail": False}
+        )
+    if format_selector and "bestaudio" in format_selector:
+        postprocessors.append(
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": str(audio_format or "m4a"),
+                "preferredquality": "192",
+            }
+        )
+        ydl_opts["keepvideo"] = bool(keep_originals)
+    if postprocessors:
+        ydl_opts["postprocessors"] = postprocessors
 
     before = {
         f: os.path.getmtime(os.path.join(target_dir, f))

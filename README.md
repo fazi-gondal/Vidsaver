@@ -1,13 +1,18 @@
 
 # Vidsaver
 
-Vidsaver is a cross-platform video downloader built with **Python 3.14** and **Flet 1.0**. It uses `yt-dlp` for download handling and provides a clean mobile/desktop UI for pasting a link, downloading, viewing saved videos, and deleting downloads.
+Vidsaver is a cross-platform video downloader built with **Python 3.14** and **Flet 1.1.2**. It uses `yt-dlp` for download handling and provides a mobile/desktop UI with independent queue tasks, saved-video library management, persistent settings and Android MediaStore publishing.
 
 **Download TikTok and Instagram reels without watermark in Full HD.**
 
 ## Features
 
 - Download videos from all platforms supported by `yt-dlp` (TikTok, Instagram, YouTube, Twitter/X, Facebook, and more)
+- Independent download queue with configurable concurrency, cancellation and retry
+- Active, queued and terminal task history with speed, size, ETA and per-task progress
+- Media analysis, playlist queueing, quality selection and quick download
+- Persistent SQLite task storage and recovery for interrupted active tasks
+- Persistent settings for themes, quality, container, concurrency, timeout, subtitles and media metadata
 - Android downloads are published through MediaStore to:
   ```text
   Movies/Vidsaver
@@ -60,11 +65,18 @@ Vidsaver is a cross-platform video downloader built with **Python 3.14** and **F
 |   |-- assets/
 |   |   |-- icon.png
 |   |   `-- splash_android.png
+|   |-- components/
+|   |-- config/
+|   |-- models/
+|   |-- services/
+|   |-- views/
 |   |-- cookies.txt
 |   |-- downloader.py
 |   |-- library.py
 |   |-- main.py
 |   `-- player.py
+|-- tests/
+|   `-- unit/
 |-- pyproject.toml
 `-- README.md
 ```
@@ -81,6 +93,13 @@ Run as a web app:
 
 ```bash
 uv run flet run --web
+```
+
+Run the unit test suite:
+
+```bash
+$env:PYTHONPATH="src"
+uv run python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 ## Android Permissions

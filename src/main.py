@@ -54,13 +54,18 @@ def ensure_storage_paths(page: ft.Page):
     if is_android_page(page):
         download_dir = os.path.join(tempfile.gettempdir(), "vidsaver-staging")
     else:
-        # Use os.environ.get to avoid KeyError on non-Windows platforms
-        user_profile = os.environ.get("USERPROFILE") or os.environ.get("HOME") or ""
-        download_dir = (
-            os.path.join(user_profile, "Downloads", "VidSaver")
-            if user_profile
-            else "./downloads"
-        )
+        settings = getattr(page, "_app_settings", None)
+        configured_dir = getattr(settings, "download_dir", "") if settings else ""
+        if configured_dir:
+            download_dir = configured_dir
+        else:
+            # Use os.environ.get to avoid KeyError on non-Windows platforms
+            user_profile = os.environ.get("USERPROFILE") or os.environ.get("HOME") or ""
+            download_dir = (
+                os.path.join(user_profile, "Downloads", "VidSaver")
+                if user_profile
+                else "./downloads"
+            )
 
     os.makedirs(download_dir, exist_ok=True)
     setattr(page, "_download_dir", download_dir)
@@ -93,13 +98,26 @@ async def init_storage_paths(page: ft.Page):
         download_dir = os.path.join(temp_dir, "vidsaver-staging")
     else:
         metadata_path = os.path.join(data_dir, "metadata.json")
-        # Use os.environ.get to avoid KeyError on non-Windows platforms
-        user_profile = os.environ.get("USERPROFILE") or os.environ.get("HOME") or ""
-        download_dir = (
-            os.path.join(user_profile, "Downloads", "VidSaver")
-            if user_profile
-            else "./downloads"
-        )
+        settings = getattr(page, "_app_settings", None)
+        if settings is None:
+            try:
+                from config.settings import SettingsRepository
+
+                settings = SettingsRepository(data_dir).load()
+                setattr(page, "_app_settings", settings)
+            except Exception:
+                settings = None
+        configured_dir = getattr(settings, "download_dir", "") if settings else ""
+        if configured_dir:
+            download_dir = configured_dir
+        else:
+            # Use os.environ.get to avoid KeyError on non-Windows platforms
+            user_profile = os.environ.get("USERPROFILE") or os.environ.get("HOME") or ""
+            download_dir = (
+                os.path.join(user_profile, "Downloads", "VidSaver")
+                if user_profile
+                else "./downloads"
+            )
 
     os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
     os.makedirs(download_dir, exist_ok=True)
@@ -208,6 +226,34 @@ async def publish_download_result(page: ft.Page, download_result: dict, metadata
         save_metadata(metadata_path, meta)
         return True, ""
     return False, last_error or "Unable to publish video to Gallery."
+
+
+def show_task_details(page: ft.Page, task) -> None:
+    """Show concise persisted task diagnostics."""
+    created = datetime.fromtimestamp(task.created_at).strftime("%d %b %Y, %H:%M")
+    finished = (
+        datetime.fromtimestamp(task.finished_at).strftime("%d %b %Y, %H:%M")
+        if task.finished_at
+        else "Not finished"
+    )
+    dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text(task.title or "Download task"),
+        content=ft.Column(
+            [
+                ft.Text(f"Status: {task.state.label}"),
+                ft.Text(f"URL: {task.request.url}", selectable=True),
+                ft.Text(f"Created: {created}"),
+                ft.Text(f"Finished: {finished}"),
+                ft.Text(f"Output: {task.output_path or 'Not available'}", selectable=True),
+                ft.Text(task.error, color=ft.Colors.ERROR, visible=bool(task.error)),
+            ],
+            tight=True,
+            spacing=6,
+        ),
+        actions=[ft.TextButton("Close", on_click=lambda e: page.pop_dialog())],
+    )
+    asyncio.create_task(page.show_dialog(dialog))
 
 
 async def delete_saved_video(page: ft.Page, info: dict) -> bool:
@@ -392,10 +438,13 @@ def App(page: ft.Page):
                         asyncio.create_task(nsvc.update_progress(body))
                     elif state is DownloadState.COMPLETED:
                         asyncio.create_task(nsvc.notify_completed(task.title or "Video saved"))
-                        if active <= 1:
+                        if active == 0:
                             asyncio.create_task(nsvc.stop_download_session())
                     elif state in (DownloadState.FAILED, DownloadState.CANCELLED):
-                        if active <= 1:
+                        asyncio.create_task(
+                            nsvc.notify_failed(task.title or "Download", task.error)
+                        )
+                        if active == 0:
                             asyncio.create_task(nsvc.stop_download_session())
 
                 page.loop.call_soon_threadsafe(_notify_ui)
@@ -447,6 +496,12 @@ def App(page: ft.Page):
                 "concurrent_fragments": int(getattr(s, "concurrent_fragments", 4) or 4),
                 "rate_limit": str(rate * 1024) if rate > 0 else None,
                 "writesubtitles": bool(getattr(s, "write_subtitles", False)),
+                "subtitle_langs": str(getattr(s, "subtitle_langs", "en") or "en"),
+                "timeout_seconds": int(getattr(s, "timeout_seconds", 30) or 30),
+                "audio_format": str(getattr(s, "audio_format", "m4a") or "m4a"),
+                "embed_thumbnail": bool(getattr(s, "embed_thumbnail", True)),
+                "embed_metadata": bool(getattr(s, "embed_metadata", True)),
+                "keep_originals": bool(getattr(s, "keep_originals", False)),
             }
 
         mgr = DownloadManager(
@@ -590,6 +645,7 @@ def App(page: ft.Page):
             tasks=tasks,
             on_cancel=lambda tid: (mgr.cancel(tid) if mgr else None, bump_tasks()),
             on_retry=lambda tid: (mgr.retry(tid) if mgr else None, bump_tasks()),
+            on_details=lambda task: show_task_details(page, task),
         )
     elif active_tab == 2:
         from library import LibraryView

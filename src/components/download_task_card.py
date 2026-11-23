@@ -15,6 +15,7 @@ def DownloadTaskCard(
     *,
     on_cancel=None,
     on_retry=None,
+    on_details=None,
 ):
     pct = task.progress.percent
     progress_value = None if pct is None else max(0.0, min(1.0, pct / 100.0))
@@ -39,6 +40,13 @@ def DownloadTaskCard(
                 on_click=lambda e: on_retry and on_retry(task.id),
             )
         )
+    actions.append(
+        ft.IconButton(
+            icon=ft.Icons.INFO_OUTLINE_ROUNDED,
+            tooltip="Task details",
+            on_click=lambda e: on_details and on_details(task),
+        )
+    )
 
     thumb = ft.Container(
         width=64,

@@ -7,6 +7,7 @@ import flet as ft
 from config.constants import (
     APP_VERSION,
     DEFAULT_MAX_CONCURRENT,
+    AUDIO_FORMATS,
     REPO_URL,
     RESOLUTION_PRESETS,
     VIDEO_CONTAINERS,
@@ -32,6 +33,25 @@ def SettingsView(
     )
     retry_count, set_retry_count = ft.use_state(str(getattr(settings, "retry_count", 5)))
     rate_limit, set_rate_limit = ft.use_state(str(getattr(settings, "rate_limit_kbps", 0)))
+    timeout_seconds, set_timeout_seconds = ft.use_state(
+        str(getattr(settings, "timeout_seconds", 30))
+    )
+    audio_format, set_audio_format = ft.use_state(
+        getattr(settings, "audio_format", "m4a")
+    )
+    subtitle_langs, set_subtitle_langs = ft.use_state(
+        getattr(settings, "subtitle_langs", "en")
+    )
+    download_dir, set_download_dir = ft.use_state(getattr(settings, "download_dir", ""))
+    embed_thumbnail, set_embed_thumbnail = ft.use_state(
+        getattr(settings, "embed_thumbnail", True)
+    )
+    embed_metadata, set_embed_metadata = ft.use_state(
+        getattr(settings, "embed_metadata", True)
+    )
+    keep_originals, set_keep_originals = ft.use_state(
+        getattr(settings, "keep_originals", False)
+    )
     clipboard_auto, set_clipboard_auto = ft.use_state(settings.clipboard_auto_paste)
     notifications_on, set_notifications_on = ft.use_state(settings.notifications_enabled)
     background_on, set_background_on = ft.use_state(
@@ -237,6 +257,39 @@ def SettingsView(
                         ),
                     ),
                     tile(
+                        "Download timeout",
+                        "Socket timeout in seconds (5–300).",
+                        ft.TextField(
+                            value=timeout_seconds,
+                            width=72,
+                            dense=True,
+                            text_align=ft.TextAlign.CENTER,
+                            keyboard_type=ft.KeyboardType.NUMBER,
+                            on_blur=lambda e: (
+                                set_timeout_seconds(e.control.value or "30"),
+                                persist(
+                                    timeout_seconds=clamp_int(
+                                        e.control.value or "30", 30, 5, 300
+                                    )
+                                ),
+                            ),
+                        ),
+                    ),
+                    tile(
+                        "Download location",
+                        "Desktop destination folder (Android uses app staging + Gallery).",
+                        ft.TextField(
+                            value=download_dir,
+                            dense=True,
+                            expand=True,
+                            hint_text="Leave empty for Downloads/VidSaver",
+                            on_blur=lambda e: (
+                                set_download_dir(e.control.value or ""),
+                                persist(download_dir=e.control.value or ""),
+                            ),
+                        ),
+                    ),
+                    tile(
                         "Write subtitles",
                         "Ask yt-dlp for subtitles when available.",
                         ft.Switch(
@@ -255,6 +308,70 @@ def SettingsView(
                             on_change=lambda e: (
                                 set_clipboard_auto(e.control.value),
                                 persist(clipboard_auto_paste=e.control.value),
+                            ),
+                        ),
+                    ),
+                ),
+                section(
+                    "Media preferences",
+                    tile(
+                        "Audio format",
+                        "Format for audio-only downloads.",
+                        ft.Dropdown(
+                            value=audio_format if audio_format in AUDIO_FORMATS else "m4a",
+                            width=100,
+                            dense=True,
+                            options=[ft.dropdown.Option(value) for value in AUDIO_FORMATS],
+                            on_change=lambda e: (
+                                set_audio_format(e.control.value or "m4a"),
+                                persist(audio_format=e.control.value or "m4a"),
+                            ),
+                        ),
+                    ),
+                    tile(
+                        "Subtitle languages",
+                        "Comma-separated yt-dlp subtitle language codes.",
+                        ft.TextField(
+                            value=subtitle_langs,
+                            width=130,
+                            dense=True,
+                            hint_text="en,hi",
+                            on_blur=lambda e: (
+                                set_subtitle_langs(e.control.value or "en"),
+                                persist(subtitle_langs=e.control.value or "en"),
+                            ),
+                        ),
+                    ),
+                    tile(
+                        "Thumbnail",
+                        "Download and embed thumbnails.",
+                        ft.Switch(
+                            value=embed_thumbnail,
+                            on_change=lambda e: (
+                                set_embed_thumbnail(e.control.value),
+                                persist(embed_thumbnail=e.control.value),
+                            ),
+                        ),
+                    ),
+                    tile(
+                        "Metadata",
+                        "Embed available media metadata.",
+                        ft.Switch(
+                            value=embed_metadata,
+                            on_change=lambda e: (
+                                set_embed_metadata(e.control.value),
+                                persist(embed_metadata=e.control.value),
+                            ),
+                        ),
+                    ),
+                    tile(
+                        "Keep originals",
+                        "Retain source streams after processing.",
+                        ft.Switch(
+                            value=keep_originals,
+                            on_change=lambda e: (
+                                set_keep_originals(e.control.value),
+                                persist(keep_originals=e.control.value),
                             ),
                         ),
                     ),

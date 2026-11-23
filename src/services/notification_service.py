@@ -111,3 +111,19 @@ class NotificationService:
             )
         except Exception:
             pass
+
+    async def notify_failed(self, title: str, error: str = "") -> None:
+        if not self._enabled:
+            return
+        notifications = getattr(self._page, "_notifications", None) if self._page else None
+        if notifications is None:
+            return
+        try:
+            body = error or (title or "Download failed")
+            await notifications.show(
+                3,
+                title="Download failed",
+                body=body,
+            )
+        except Exception:
+            pass

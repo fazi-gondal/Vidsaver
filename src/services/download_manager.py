@@ -50,11 +50,15 @@ class DownloadManager:
         self._workers: list[threading.Thread] = []
         self._shutdown = threading.Event()
         self._last_notify_at: dict[str, float] = {}
+        self._active_jobs = 0
+        self._condition = threading.Condition()
 
     # ------------------------------------------------------------------ API
 
     def set_max_concurrent(self, n: int) -> None:
         self._max_concurrent = max(1, min(4, int(n)))
+        with self._condition:
+            self._condition.notify_all()
         self._ensure_workers()
 
     def set_callbacks(
@@ -148,6 +152,11 @@ class DownloadManager:
         with self._lock:
             for task in restored:
                 self._tasks[task.id] = task
+                if self._task_store is not None:
+                    try:
+                        self._task_store.upsert(task)
+                    except Exception:
+                        logger.exception("task_store.upsert failed during restore")
                 count += 1
                 if task.state is DownloadState.PENDING:
                     self._queue.put(task)
@@ -231,7 +240,23 @@ class DownloadManager:
                 self._set_state(task, DownloadState.CANCELLED)
                 continue
 
-            self._run_one(task, run_download)
+            with self._condition:
+                while (
+                    self._active_jobs >= self._max_concurrent
+                    and not self._shutdown.is_set()
+                ):
+                    self._condition.wait(timeout=0.5)
+                if self._shutdown.is_set():
+                    self._queue.put(task)
+                    break
+                self._active_jobs += 1
+
+            try:
+                self._run_one(task, run_download)
+            finally:
+                with self._condition:
+                    self._active_jobs -= 1
+                    self._condition.notify_all()
 
     def _run_one(self, task: DownloadTask, run_download) -> None:
         self._set_state(task, DownloadState.PREPARING)
@@ -314,6 +339,12 @@ class DownloadManager:
                 extra_opts.get("concurrent_fragments"),
                 extra_opts.get("rate_limit"),
                 bool(extra_opts.get("writesubtitles")),
+                str(extra_opts.get("subtitle_langs") or "en"),
+                int(extra_opts.get("timeout_seconds") or 30),
+                str(extra_opts.get("audio_format") or "m4a"),
+                bool(extra_opts.get("embed_thumbnail", True)),
+                bool(extra_opts.get("embed_metadata", True)),
+                bool(extra_opts.get("keep_originals", False)),
             )
         except Exception as exc:
             self._set_state(task, DownloadState.FAILED, error=str(exc))
