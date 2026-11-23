@@ -72,22 +72,7 @@ def save_metadata(metadata_path: str, meta: dict):
 
 
 def resolve_short_url(url: str) -> str:
-    """Follow redirects for short TikTok links. Lazy-imports requests."""
-    if "tiktok.com" in url:
-        import requests
-
-        try:
-            headers = {
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                )
-            }
-            response = requests.head(url, headers=headers, allow_redirects=True, timeout=10)
-            return response.url
-        except Exception:
-            pass
+    """Leave short-link resolution to yt-dlp to avoid an extra network request."""
     return url
 
 
@@ -221,9 +206,12 @@ def analyze_media(url: str, cookie_path: str) -> dict | None:
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
     except Exception as exc:
+        error = str(exc)
+        if "timed out" in error.lower() or "timeout" in error.lower():
+            error = f"Connection to {platform} timed out. Check your internet connection and try again."
         return {
             "ok": False,
-            "error": str(exc),
+            "error": error,
             "url": url,
             "platform": platform,
         }
@@ -374,11 +362,7 @@ def run_download(
     """
     del metadata_path, on_finish, schedule_media_scan_later
 
-    if not os.path.exists(cookie_path):
-        on_status("Error: 'cookies.txt' file missing!")
-        return None
-
-    # Resolve shortened URLs (e.g. vt.tiktok.com) to full destination URL
+    # yt-dlp handles shortened URLs directly, without a separate preflight request.
     url = resolve_short_url(url)
 
     downloaded_paths = []
@@ -428,7 +412,6 @@ def run_download(
     ydl_opts: Any = {
         "outtmpl": os.path.join(target_dir, "%(title).100s.%(ext)s"),
         "progress_hooks": [_hook],
-        "cookiefile": cookie_path,
         "updatetime": False,
         "format": format_selector
         or "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b/best",
@@ -466,6 +449,8 @@ def run_download(
             "Accept-Language": "en-US,en;q=0.5",
         },
     }
+    if cookie_path and os.path.exists(cookie_path):
+        ydl_opts["cookiefile"] = cookie_path
     postprocessors: list[dict] = []
     if embed_metadata:
         postprocessors.append({"key": "FFmpegMetadata"})

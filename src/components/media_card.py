@@ -86,7 +86,7 @@ def MediaPreviewCard(
                 ft.Row(
                     [
                         ft.Button(
-                            "Quick download",
+                            content="Quick download",
                             icon=ft.Icons.DOWNLOAD_ROUNDED,
                             expand=True,
                             style=ft.ButtonStyle(

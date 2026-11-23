@@ -319,7 +319,7 @@ def LibraryView(
                                     width=130,
                                     label="Platform",
                                     options=[ft.dropdown.Option(p) for p in platform_options],
-                                    on_change=lambda e: set_platform_filter(e.control.value or "All"),
+                                    on_select=lambda e: set_platform_filter(e.control.value or "All"),
                                 ),
                                 ft.Dropdown(
                                     value=sort_mode,
@@ -331,7 +331,7 @@ def LibraryView(
                                         ft.dropdown.Option("oldest", "Oldest"),
                                         ft.dropdown.Option("name", "Name"),
                                     ],
-                                    on_change=lambda e: set_sort_mode(e.control.value or "newest"),
+                                    on_select=lambda e: set_sort_mode(e.control.value or "newest"),
                                 ),
                             ],
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,

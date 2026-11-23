@@ -143,7 +143,6 @@ def ensure_media_scanner(page: ft.Page):
         page.services.append(scanner)
         setattr(page, "_media_scanner", scanner)
         setattr(page, "_media_scanner_error", "")
-        page.update()
         print("[VidSaver] MediaStore service initialized")
     except Exception as e:
         setattr(page, "_media_scanner_error", str(e))
@@ -323,7 +322,7 @@ async def sync_saved_videos(page: ft.Page, metadata_path: str) -> None:
         save_metadata(metadata_path, meta)
 
 
-# HomeView lives in views/home_view.py (Phase 3)
+# HomeView owns the URL input, analysis preview, quality selection, and queue action.
 
 
 @ft.component
@@ -344,25 +343,6 @@ def App(page: ft.Page):
 
     refresh_trigger, set_refresh_trigger = ft.use_state(0)
     scroll_offset, set_scroll_offset = ft.use_state(0)
-
-    def sync_page_ui():
-        if page.appbar:
-            page.appbar.visible = not playing_file
-
-        if playing_file:
-            page.navigation_bar = None
-        else:
-            from components.bottom_navigation import build_navigation_bar
-
-            mgr = getattr(page, "_download_manager", None)
-            badge = mgr.active_count() if mgr else 0
-            page.navigation_bar = build_navigation_bar(
-                selected_index=active_tab,
-                on_change=lambda e: set_active_tab(e.control.selected_index),
-                downloading_badge=badge,
-            )
-
-    ft.use_effect(sync_page_ui, dependencies=[playing_file, active_tab, tasks_tick])
 
     def set_download_busy(message: str):
         set_download_completed(False)
@@ -587,55 +567,46 @@ def App(page: ft.Page):
             on_close=lambda e: set_playing_file(None),
         )
     elif active_tab == 0:
+        from downloader import analyze_media
         from views.home_view import HomeView
 
-        async def do_analyze(u: str):
-            from downloader import analyze_media
-
+        async def do_analyze(url: str):
             cookie_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
-            result = await asyncio.to_thread(analyze_media, u, cookie_path)
+            result = await asyncio.to_thread(analyze_media, url, cookie_path)
             set_analysis(result)
             if result and result.get("ok") and not result.get("is_playlist"):
                 set_quality_label("Best available")
                 setattr(page, "_selected_format_selector", None)
                 settings = getattr(page, "_app_settings", None)
-                default_q = getattr(settings, "default_quality", "best") if settings else "best"
-                if default_q and default_q != "best":
-                    # Match e.g. "1080" or "1080p" against option heights
-                    digits = "".join(c for c in str(default_q) if c.isdigit())
+                default_quality = getattr(settings, "default_quality", "best") if settings else "best"
+                if default_quality and default_quality != "best":
+                    digits = "".join(c for c in str(default_quality) if c.isdigit())
                     if digits:
-                        want = int(digits)
-                        for opt in result.get("quality_options") or []:
-                            if opt.get("height") == want:
-                                set_quality_label(opt.get("label") or f"{want}p")
+                        height = int(digits)
+                        for option in result.get("quality_options") or []:
+                            if option.get("height") == height:
+                                set_quality_label(option.get("label") or f"{height}p")
                                 setattr(
                                     page,
                                     "_selected_format_selector",
-                                    f"bv*[height<={want}]+ba/b[height<={want}]/best",
+                                    f"bv*[height<={height}]+ba/b[height<={height}]/best",
                                 )
                                 break
             return result
 
-        def select_quality(opt: dict):
-            set_quality_label(opt.get("label") or "Best available")
-            height = opt.get("height") or 0
-            fid = opt.get("format_id") or ""
-            if opt.get("audio_only") or height == -1:
-                setattr(page, "_selected_format_selector", "bestaudio/best")
+        def select_quality(option: dict):
+            set_quality_label(option.get("label") or "Best available")
+            height = option.get("height") or 0
+            format_id = option.get("format_id") or ""
+            if option.get("audio_only") or height == -1:
+                selector = "bestaudio/best"
             elif not height:
-                setattr(page, "_selected_format_selector", None)
-            elif fid:
-                setattr(
-                    page,
-                    "_selected_format_selector",
-                    f"{fid}+bestaudio/best[height<={height}]/best",
-                )
+                selector = None
+            elif format_id:
+                selector = f"{format_id}+bestaudio/best[height<={height}]/best"
             else:
-                setattr(
-                    page,
-                    "_selected_format_selector",
-                    f"bv*[height<={height}]+ba/b[height<={height}]/best",
-                )
+                selector = f"bv*[height<={height}]+ba/b[height<={height}]/best"
+            setattr(page, "_selected_format_selector", selector)
 
         content_view = HomeView(
             page=page,
@@ -759,7 +730,29 @@ def App(page: ft.Page):
             on_request_notification_permission=request_notif_perm,
         )
 
-    return ft.SafeArea(content=content_view, expand=True)
+    if playing_file:
+        return ft.SafeArea(content=content_view, expand=True)
+
+    from components.bottom_navigation import build_navigation_bar
+
+    mgr = getattr(page, "_download_manager", None)
+    badge = mgr.active_count() if mgr else 0
+    nav = build_navigation_bar(
+        selected_index=active_tab,
+        on_change=lambda e: set_active_tab(e.control.selected_index),
+        downloading_badge=badge,
+    )
+    return ft.SafeArea(
+        content=ft.Column(
+            [
+                ft.Container(content=content_view, expand=True),
+                nav,
+            ],
+            spacing=0,
+            expand=True,
+        ),
+        expand=True,
+    )
 
 
 async def main(page: ft.Page):

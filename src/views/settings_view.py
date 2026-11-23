@@ -127,7 +127,7 @@ def SettingsView(
                 section(
                     "Appearance",
                     ft.SegmentedButton(
-                        selected={theme_mode},
+                        selected=[theme_mode],
                         allow_multiple_selection=False,
                         segments=[
                             ft.Segment(value="system", label=ft.Text("System"), icon=ft.Icon(ft.Icons.BRIGHTNESS_AUTO)),
@@ -153,7 +153,7 @@ def SettingsView(
                                 ft.dropdown.Option("480", "480p"),
                                 ft.dropdown.Option("360", "360p"),
                             ],
-                            on_change=lambda e: (
+                            on_select=lambda e: (
                                 set_default_quality(e.control.value or "best"),
                                 persist(default_quality=e.control.value or "best"),
                             ),
@@ -167,7 +167,7 @@ def SettingsView(
                             width=100,
                             dense=True,
                             options=[ft.dropdown.Option(c) for c in VIDEO_CONTAINERS],
-                            on_change=lambda e: (
+                            on_select=lambda e: (
                                 set_default_container(e.control.value or "mp4"),
                                 persist(default_container=e.control.value or "mp4"),
                             ),
@@ -184,7 +184,7 @@ def SettingsView(
                                 ft.dropdown.Option("video", "Video"),
                                 ft.dropdown.Option("audio", "Audio"),
                             ],
-                            on_change=lambda e: (
+                            on_select=lambda e: (
                                 set_download_mode(e.control.value or "video"),
                                 persist(default_download_mode=e.control.value or "video"),
                             ),
@@ -322,7 +322,7 @@ def SettingsView(
                             width=100,
                             dense=True,
                             options=[ft.dropdown.Option(value) for value in AUDIO_FORMATS],
-                            on_change=lambda e: (
+                            on_select=lambda e: (
                                 set_audio_format(e.control.value or "m4a"),
                                 persist(audio_format=e.control.value or "m4a"),
                             ),

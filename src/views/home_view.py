@@ -49,17 +49,6 @@ def HomeView(
         except Exception:
             pass
 
-    def setup_lifecycle():
-        def on_lifecycle(e):
-            if e.state == ft.AppLifecycleState.RESUME:
-                asyncio.create_task(try_paste_clipboard())
-
-        old_handler = page.on_app_lifecycle_state_change
-        page.on_app_lifecycle_state_change = on_lifecycle
-        return lambda: setattr(page, "on_app_lifecycle_state_change", old_handler)
-
-    ft.use_effect(setup_lifecycle, dependencies=[url])
-
     async def on_url_focus(_e):
         if not url:
             await try_paste_clipboard()
@@ -177,7 +166,7 @@ def HomeView(
                             expand=True,
                         ),
                         ft.Button(
-                            "Queue all",
+                            content="Queue all",
                             icon=ft.Icons.PLAYLIST_ADD_CHECK,
                             style=ft.ButtonStyle(bgcolor=PRIMARY, color=ft.Colors.WHITE),
                             disabled=download_disabled or analyzing,
@@ -219,89 +208,97 @@ def HomeView(
             busy=download_disabled or analyzing,
         )
 
-    return ft.Container(
-        content=ft.Column(
-            controls=[
-                ft.Text(
-                    "Vidsaver",
-                    size=22,
-                    weight=ft.FontWeight.BOLD,
-                    font_family=FONT_HEADING,
-                    color=PRIMARY,
-                ),
-                ft.Text(
-                    SUPPORTED_HINT,
-                    size=12,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
-                    font_family=FONT_BODY,
-                ),
-                ft.Row(
-                    [
-                        ft.Container(
-                            content=ft.Text(name, size=10, weight=ft.FontWeight.W_600),
-                            padding=ft.Padding(8, 4, 8, 4),
-                            border_radius=12,
-                            bgcolor=ft.Colors.with_opacity(0.08, PRIMARY),
-                        )
-                        for name in ("TikTok", "Instagram", "YouTube", "X", "Facebook")
-                    ],
-                    spacing=6,
-                    wrap=True,
-                ),
-                UrlInput(
-                    value=url,
-                    on_change=set_url,
-                    on_submit=handle_analyze,
-                    on_paste_click=lambda e: asyncio.create_task(do_paste(e)),
-                    on_focus=lambda e: asyncio.create_task(on_url_focus(e)),
+    controls = [
+        ft.Text(
+            "Vidsaver",
+            size=22,
+            weight=ft.FontWeight.BOLD,
+            font_family=FONT_HEADING,
+            color=PRIMARY,
+        ),
+        ft.Text(
+            SUPPORTED_HINT,
+            size=12,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+            font_family=FONT_BODY,
+        ),
+        ft.Row(
+            [
+                ft.Container(
+                    content=ft.Text(name, size=10, weight=ft.FontWeight.W_600),
+                    padding=ft.Padding(8, 4, 8, 4),
+                    border_radius=12,
+                    bgcolor=ft.Colors.with_opacity(0.08, PRIMARY),
+                )
+                for name in ("TikTok", "Instagram", "YouTube", "X", "Facebook")
+            ],
+            spacing=6,
+            wrap=True,
+        ),
+        UrlInput(
+            value=url,
+            on_change=set_url,
+            on_submit=handle_analyze,
+            on_paste_click=lambda e: asyncio.create_task(do_paste(e)),
+            on_focus=lambda e: asyncio.create_task(on_url_focus(e)),
+            disabled=download_disabled or analyzing,
+        ),
+        ft.Row(
+            [
+                ft.Button(
+                    content="Analyze",
+                    icon=ft.Icons.SEARCH_ROUNDED,
+                    expand=True,
+                    style=ft.ButtonStyle(bgcolor=PROCESSING, color=ft.Colors.WHITE),
                     disabled=download_disabled or analyzing,
+                    on_click=handle_analyze,
                 ),
-                ft.Row(
-                    [
-                        ft.Button(
-                            "Analyze",
-                            icon=ft.Icons.SEARCH_ROUNDED,
-                            expand=True,
-                            style=ft.ButtonStyle(bgcolor=PROCESSING, color=ft.Colors.WHITE),
-                            disabled=download_disabled or analyzing,
-                            on_click=handle_analyze,
-                        ),
-                        ft.Button(
-                            "Quick download",
-                            icon=ft.Icons.FLASH_ON_ROUNDED,
-                            expand=True,
-                            style=ft.ButtonStyle(bgcolor=PRIMARY, color=ft.Colors.WHITE),
-                            disabled=download_disabled or analyzing,
-                            on_click=handle_quick,
-                        ),
-                    ],
-                    spacing=8,
-                ),
-                ft.ProgressBar(
-                    height=4,
-                    value=progress_val,
-                    visible=progress_visible or analyzing,
-                    color=PRIMARY,
-                    bgcolor=ft.Colors.with_opacity(0.15, PRIMARY),
-                    border_radius=4,
-                ),
-                ft.Text(
-                    value=analyze_error or status_text_val,
-                    color=ft.Colors.ERROR if analyze_error else ft.Colors.ON_SURFACE_VARIANT,
-                    size=12,
-                    font_family=FONT_BODY,
-                ),
-                preview,
-                playlist_block,
-                ft.Container(expand=True),
-                ft.Text(
-                    "Made with love by Fazi Gondal",
-                    size=12,
-                    color=ft.Colors.OUTLINE,
-                    text_align=ft.TextAlign.CENTER,
-                    font_family=FONT_BODY,
+                ft.Button(
+                    content="Download",
+                    icon=ft.Icons.DOWNLOAD_ROUNDED,
+                    expand=True,
+                    style=ft.ButtonStyle(bgcolor=PRIMARY, color=ft.Colors.WHITE),
+                    disabled=download_disabled or analyzing,
+                    on_click=handle_quick,
                 ),
             ],
+            spacing=8,
+        ),
+        ft.ProgressBar(
+            height=4,
+            value=progress_val,
+            visible=progress_visible or analyzing,
+            color=PRIMARY,
+            bgcolor=ft.Colors.with_opacity(0.15, PRIMARY),
+            border_radius=4,
+        ),
+        ft.Text(
+            value=analyze_error or status_text_val,
+            color=ft.Colors.ERROR if analyze_error else ft.Colors.ON_SURFACE_VARIANT,
+            size=12,
+            font_family=FONT_BODY,
+        ),
+    ]
+    if preview is not None:
+        controls.append(preview)
+    if playlist_block is not None:
+        controls.append(playlist_block)
+    controls.extend(
+        [
+            ft.Container(expand=True),
+            ft.Text(
+                "Made with love by Fazi Gondal",
+                size=12,
+                color=ft.Colors.OUTLINE,
+                text_align=ft.TextAlign.CENTER,
+                font_family=FONT_BODY,
+            ),
+        ]
+    )
+
+    return ft.Container(
+        content=ft.Column(
+            controls=controls,
             spacing=12,
             horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
             scroll=ft.ScrollMode.ADAPTIVE,
