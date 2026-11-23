@@ -363,6 +363,7 @@ def run_download(
     embed_thumbnail: bool = True,
     embed_metadata: bool = True,
     keep_originals: bool = False,
+    container: str = "mp4",
 ):
     """
     Execute a yt-dlp download synchronously in a worker thread.
@@ -448,6 +449,7 @@ def run_download(
         "retries": retries if retries is not None else 2,
         "fragment_retries": retries if retries is not None else 2,
         "concurrent_fragment_downloads": concurrent_fragments if concurrent_fragments is not None else 4,
+        "merge_output_format": container if container in ("mp4", "mkv", "webm") else "mp4",
         "quiet": True,
         "no_warnings": True,
         **({"ratelimit": rate_limit} if rate_limit else {}),

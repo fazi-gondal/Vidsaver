@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS download_tasks (
     thumbnail_url TEXT,
     state TEXT NOT NULL,
     format_selector TEXT,
+    container TEXT,
+    mode TEXT,
     output_path TEXT,
     error TEXT,
     progress_json TEXT,
@@ -53,6 +55,16 @@ class TaskStore:
             conn = self._connect()
             try:
                 conn.executescript(_SCHEMA)
+                columns = {
+                    row["name"]
+                    for row in conn.execute("PRAGMA table_info(download_tasks)").fetchall()
+                }
+                if "container" not in columns:
+                    conn.execute(
+                        "ALTER TABLE download_tasks ADD COLUMN container TEXT"
+                    )
+                if "mode" not in columns:
+                    conn.execute("ALTER TABLE download_tasks ADD COLUMN mode TEXT")
                 conn.commit()
             finally:
                 conn.close()
@@ -62,6 +74,8 @@ class TaskStore:
         extra = task.request.extra_ydl_opts or {}
         if extra.get("format"):
             fmt = str(extra["format"])
+        container = str(task.request.container or extra.get("container") or "mp4")
+        mode = str(task.request.mode or extra.get("mode") or "video")
         progress = {
             "percent": task.progress.percent,
             "downloaded_bytes": task.progress.downloaded_bytes,
@@ -78,6 +92,8 @@ class TaskStore:
             task.thumbnail_url,
             task.state.value,
             fmt,
+            container,
+            mode,
             task.output_path,
             task.error,
             json.dumps(progress),
@@ -91,9 +107,9 @@ class TaskStore:
                     """
                     INSERT INTO download_tasks (
                         id, url, title, platform, thumbnail_url, state,
-                        format_selector, output_path, error, progress_json,
+                        format_selector, container, mode, output_path, error, progress_json,
                         created_at, finished_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         url=excluded.url,
                         title=excluded.title,
@@ -101,6 +117,8 @@ class TaskStore:
                         thumbnail_url=excluded.thumbnail_url,
                         state=excluded.state,
                         format_selector=excluded.format_selector,
+                        container=excluded.container,
+                        mode=excluded.mode,
                         output_path=excluded.output_path,
                         error=excluded.error,
                         progress_json=excluded.progress_json,
@@ -165,9 +183,18 @@ class TaskStore:
             progress_raw = {}
 
         fmt = row["format_selector"] or ""
+        container = row["container"] or "mp4"
+        mode = row["mode"] or "video"
         request = DownloadRequest(
             url=row["url"],
-            extra_ydl_opts={"format": fmt} if fmt else {},
+            quality="best",
+            container=container,
+            mode=mode,
+            extra_ydl_opts={
+                **({"format": fmt} if fmt else {}),
+                "container": container,
+                "mode": mode,
+            },
         )
         state_val = row["state"] or DownloadState.PENDING.value
         try:

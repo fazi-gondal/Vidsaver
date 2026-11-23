@@ -361,7 +361,6 @@ def App(page: ft.Page):
                 on_change=lambda e: set_active_tab(e.control.selected_index),
                 downloading_badge=badge,
             )
-        page.update()
 
     ft.use_effect(sync_page_ui, dependencies=[playing_file, active_tab, tasks_tick])
 
@@ -377,7 +376,6 @@ def App(page: ft.Page):
         set_download_disabled(False)
         set_refresh_trigger(lambda prev: prev + 1)
         if is_done:
-            # Flet 1.0.0: show SnackBar via overlay.append + open=True + page.update()
             snack = ft.SnackBar(
                 content=ft.Text("Video download complete"),
                 open=True,
@@ -385,8 +383,7 @@ def App(page: ft.Page):
                 behavior=ft.SnackBarBehavior.FLOATING,
                 margin=ft.Margin(left=16, top=0, right=16, bottom=10),
             )
-            page.overlay.append(snack)
-            page.update()
+            asyncio.create_task(page.show_dialog(snack))
 
 
     def bump_tasks(_n=None):
@@ -532,6 +529,22 @@ def App(page: ft.Page):
         settings = getattr(page, "_app_settings", None)
         if settings:
             mgr.set_max_concurrent(getattr(settings, "max_concurrent", 1))
+            if not format_selector:
+                mode = getattr(settings, "default_download_mode", "video")
+                if mode == "audio":
+                    format_selector = "bestaudio/best"
+                else:
+                    digits = "".join(
+                        c
+                        for c in str(getattr(settings, "default_quality", "best") or "best")
+                        if c.isdigit()
+                    )
+                    if digits:
+                        height = int(digits)
+                        format_selector = (
+                            f"bv*[height<={height}]+ba/b"
+                            f"[height<={height}]/best"
+                        )
 
         title = ""
         platform = "Video"
@@ -547,6 +560,9 @@ def App(page: ft.Page):
             title=title,
             platform=platform,
             thumbnail_url=thumb,
+            quality=getattr(settings, "default_quality", "best") if settings else "best",
+            container=getattr(settings, "default_container", "mp4") if settings else "mp4",
+            mode=getattr(settings, "default_download_mode", "video") if settings else "video",
         )
         set_status_text(f"Queued: {title or url}")
         bump_tasks()
@@ -682,8 +698,7 @@ def App(page: ft.Page):
                     duration=2000,
                     behavior=ft.SnackBarBehavior.FLOATING,
                 )
-                page.overlay.append(snack)
-                page.update()
+                asyncio.create_task(page.show_dialog(snack))
             except Exception:
                 pass
 
@@ -722,7 +737,6 @@ def App(page: ft.Page):
             nsvc = getattr(page, "_notification_service", None)
             if nsvc is not None:
                 nsvc.set_enabled(getattr(s, "notifications_enabled", True))
-            page.update()
 
         def clear_finished():
             mgr = getattr(page, "_download_manager", None)

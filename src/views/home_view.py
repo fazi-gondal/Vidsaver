@@ -112,8 +112,7 @@ def HomeView(
 
         def pick(opt):
             on_select_quality(opt)
-            sheet.open = False
-            page.update()
+            asyncio.create_task(page.pop_dialog())
 
         sheet = ft.BottomSheet(
             content=ft.Container(
@@ -150,8 +149,7 @@ def HomeView(
             ),
             open=True,
         )
-        page.overlay.append(sheet)
-        page.update()
+        asyncio.create_task(page.show_dialog(sheet))
 
     # Playlist list + bulk enqueue
     playlist_block = None

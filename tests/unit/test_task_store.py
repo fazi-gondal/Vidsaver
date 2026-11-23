@@ -24,6 +24,24 @@ class TaskStoreTests(unittest.TestCase):
             self.assertEqual(1, len(restored))
             self.assertEqual(DownloadState.PENDING, restored[0].state)
 
+    def test_container_and_mode_restore(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = TaskStore(directory + "/downloads.db")
+            task = DownloadTask(
+                request=DownloadRequest(
+                    url="https://example.com/audio",
+                    container="mkv",
+                    mode="audio",
+                ),
+                state=DownloadState.PENDING,
+            )
+            store.upsert(task)
+
+            restored = store.load_all()
+
+            self.assertEqual("mkv", restored[0].request.container)
+            self.assertEqual("audio", restored[0].request.mode)
+
     def test_active_task_becomes_failed_for_retry(self):
         with tempfile.TemporaryDirectory() as directory:
             store = TaskStore(directory + "/downloads.db")

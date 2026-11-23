@@ -80,10 +80,20 @@ class DownloadManager:
         title: str = "",
         platform: str = "Video",
         thumbnail_url: str = "",
+        quality: str = "best",
+        container: str = "mp4",
+        mode: str = "video",
     ) -> DownloadTask:
         request = DownloadRequest(
             url=url,
-            extra_ydl_opts={"format": format_selector} if format_selector else {},
+            quality=quality,
+            container=container,
+            mode=mode,
+            extra_ydl_opts={
+                **({"format": format_selector} if format_selector else {}),
+                "container": container,
+                "mode": mode,
+            },
         )
         task = DownloadTask(
             request=request,
@@ -345,6 +355,7 @@ class DownloadManager:
                 bool(extra_opts.get("embed_thumbnail", True)),
                 bool(extra_opts.get("embed_metadata", True)),
                 bool(extra_opts.get("keep_originals", False)),
+                str(extra.get("container") or "mp4"),
             )
         except Exception as exc:
             self._set_state(task, DownloadState.FAILED, error=str(exc))
