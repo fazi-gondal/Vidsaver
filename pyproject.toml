@@ -23,6 +23,15 @@ dev = [
     "flet-desktop==1.1.2",
     "flet-web==1.1.2",
 ]
+# Phase 1 PoCs — do NOT enable in production until device tests pass.
+# Usage: uv sync --group phase1-ffmpeg   or   --group phase1-notifications
+phase1-ffmpeg = [
+    "flet-libffmpeg",
+    "av",
+]
+phase1-notifications = [
+    "flet-notifications==1.1.2",
+]
 
 [tool.flet]
 org = "com.fazi"
@@ -53,6 +62,10 @@ dependencies = [
 
 [tool.flet.android.permission]
 "android.permission.INTERNET" = true
+# Enable after Phase 1 notifications PoC / when shipping flet-notifications:
+# "android.permission.POST_NOTIFICATIONS" = true
+# "android.permission.FOREGROUND_SERVICE" = true
+# "android.permission.FOREGROUND_SERVICE_DATA_SYNC" = true
 
 [tool.flet.extensions]
 flet_media_scanner = "flet_media_scanner.Extension"

@@ -277,92 +277,7 @@ async def sync_saved_videos(page: ft.Page, metadata_path: str) -> None:
         save_metadata(metadata_path, meta)
 
 
-@ft.component
-def HomeView(
-    status_text_val: str,
-    progress_val: float | None,
-    progress_visible: bool,
-    download_disabled: bool,
-    on_download_click,
-    page: ft.Page,
-):
-    """Declarative home view component for downloading videos."""
-    url, set_url = ft.use_state("")
-
-    async def try_paste_clipboard():
-        try:
-            clip = await get_clipboard(page).get()
-            if clip and is_video_url(clip) and clip.strip() != url.strip():
-                set_url(clip.strip())
-        except Exception:
-            pass
-
-    def setup_lifecycle():
-        def on_lifecycle(e):
-            if e.state == ft.AppLifecycleState.RESUME:
-                asyncio.create_task(try_paste_clipboard())
-
-        old_handler = page.on_app_lifecycle_state_change
-        page.on_app_lifecycle_state_change = on_lifecycle
-        return lambda: setattr(page, "on_app_lifecycle_state_change", old_handler)
-
-    ft.use_effect(setup_lifecycle, dependencies=[url])
-
-    async def on_url_focus(e):
-        if not url:
-            await try_paste_clipboard()
-
-    def handle_submit(e):
-        if url.strip():
-            on_download_click(url.strip())
-
-    return ft.Container(
-        content=ft.Column(
-            controls=[
-                ft.TextField(
-                    value=url,
-                    on_change=lambda e: set_url(e.control.value),
-                    on_focus=lambda e: asyncio.create_task(on_url_focus(e)),
-                    on_submit=handle_submit,
-                    label="Paste video link",
-                    border=ft.OutlineInputBorder(
-                        border_radius=ft.BorderRadius(12, 12, 12, 12)
-                    ),
-                    filled=True,
-                    prefix_icon=ft.Icons.LINK,
-                ),
-                ft.Button(
-                    "Download",
-                    icon=ft.Icons.DOWNLOAD_ROUNDED,
-                    height=40,
-                    style=ft.ButtonStyle(bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE),
-                    disabled=download_disabled,
-                    on_click=handle_submit,
-                ),
-                ft.ProgressBar(
-                    height=4,
-                    value=progress_val,
-                    visible=progress_visible,
-                    color=ft.Colors.BLUE,
-                    bgcolor=ft.Colors.BLUE_100,
-                    border_radius=4,
-                ),
-                ft.Text(value=status_text_val, color=ft.Colors.BLUE_GREY, size=12),
-                ft.Container(height=40),
-                ft.Text(
-                    "Vidsaver made with love by Fazi Gondal",
-                    size=16,
-                    color=ft.Colors.BLUE_GREY,
-                    text_align=ft.TextAlign.CENTER,
-                ),
-            ],
-            spacing=12,
-            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-            scroll=ft.ScrollMode.ADAPTIVE,
-        ),
-        padding=ft.Padding(left=24, right=24, top=24, bottom=24),
-        expand=True,
-    )
+# HomeView lives in views/home_view.py (Phase 3)
 
 
 @ft.component
@@ -377,6 +292,10 @@ def App(page: ft.Page):
     download_disabled, set_download_disabled = ft.use_state(False)
     download_completed, set_download_completed = ft.use_state(False)
 
+    analysis, set_analysis = ft.use_state(None)
+    quality_label, set_quality_label = ft.use_state("Best available")
+    tasks_tick, set_tasks_tick = ft.use_state(0)
+
     refresh_trigger, set_refresh_trigger = ft.use_state(0)
     scroll_offset, set_scroll_offset = ft.use_state(0)
 
@@ -387,21 +306,18 @@ def App(page: ft.Page):
         if playing_file:
             page.navigation_bar = None
         else:
-            page.navigation_bar = ft.NavigationBar(
-                bgcolor=ft.Colors.WHITE_10,
+            from components.bottom_navigation import build_navigation_bar
+
+            mgr = getattr(page, "_download_manager", None)
+            badge = mgr.active_count() if mgr else 0
+            page.navigation_bar = build_navigation_bar(
                 selected_index=active_tab,
                 on_change=lambda e: set_active_tab(e.control.selected_index),
-                destinations=[
-                    ft.NavigationBarDestination(icon=ft.Icons.HOME_FILLED, label="Home"),
-                    ft.NavigationBarDestination(
-                        icon=ft.Icons.FILE_DOWNLOAD_ROUNDED,
-                        label="Downloads",
-                    ),
-                ],
+                downloading_badge=badge,
             )
         page.update()
 
-    ft.use_effect(sync_page_ui, dependencies=[playing_file, active_tab])
+    ft.use_effect(sync_page_ui, dependencies=[playing_file, active_tab, tasks_tick])
 
     def set_download_busy(message: str):
         set_download_completed(False)
@@ -426,7 +342,129 @@ def App(page: ft.Page):
             page.overlay.append(snack)
             page.update()
 
-    def start_download(url: str):
+
+    def bump_tasks(_n=None):
+        # Force Downloading tab / badge to refresh (counter on page avoids stale closure)
+        n = int(getattr(page, "_tasks_tick_counter", 0)) + 1
+        setattr(page, "_tasks_tick_counter", n)
+        set_tasks_tick(n)
+
+    def get_download_manager():
+        mgr = getattr(page, "_download_manager", None)
+        if mgr is not None:
+            return mgr
+        from services.download_manager import DownloadManager
+
+        def staging():
+            directory, _ = ensure_storage_paths(page)
+            return directory
+
+        cookie_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
+        settings = getattr(page, "_app_settings", None)
+        max_c = getattr(settings, "max_concurrent", 1) if settings else 1
+
+        def on_task_changed(task):
+            # Bump tick on UI thread so DownloadingView re-renders
+            try:
+                page.loop.call_soon_threadsafe(bump_tasks)
+                from models.download_state import DownloadState
+
+                state = getattr(task, "state", None)
+
+                def _notify_ui():
+                    nsvc = getattr(page, "_notification_service", None)
+                    if nsvc is None:
+                        return
+                    active = 0
+                    mgr2 = getattr(page, "_download_manager", None)
+                    if mgr2:
+                        active = sum(
+                            1
+                            for t in mgr2.list_tasks()
+                            if t.is_active or t.state is DownloadState.PENDING
+                        )
+                    if state is DownloadState.DOWNLOADING and active:
+                        asyncio.create_task(
+                            nsvc.start_download_session(task.title or "Vidsaver")
+                        )
+                        pct = task.progress.percent
+                        body = f"{task.title or 'Download'}: {pct:.0f}%" if pct is not None else (task.title or "Downloading…")
+                        asyncio.create_task(nsvc.update_progress(body))
+                    elif state is DownloadState.COMPLETED:
+                        asyncio.create_task(nsvc.notify_completed(task.title or "Video saved"))
+                        if active <= 1:
+                            asyncio.create_task(nsvc.stop_download_session())
+                    elif state in (DownloadState.FAILED, DownloadState.CANCELLED):
+                        if active <= 1:
+                            asyncio.create_task(nsvc.stop_download_session())
+
+                page.loop.call_soon_threadsafe(_notify_ui)
+
+                if state is DownloadState.COMPLETED:
+
+                    def _refresh():
+                        n = int(getattr(page, "_lib_refresh", 0)) + 1
+                        setattr(page, "_lib_refresh", n)
+                        set_refresh_trigger(n)
+
+                    page.loop.call_soon_threadsafe(_refresh)
+            except Exception:
+                pass
+
+        def publish_sync(result: dict):
+            # Bridge async publish into worker via concurrent future
+            import concurrent.futures
+
+            fut: concurrent.futures.Future = concurrent.futures.Future()
+
+            async def _pub():
+                try:
+                    _, metadata = ensure_storage_paths(page)
+                    ok, err = await publish_download_result(page, result, metadata)
+                    fut.set_result((ok, err))
+                except Exception as exc:
+                    fut.set_result((False, str(exc)))
+
+            try:
+                page.loop.call_soon_threadsafe(lambda: asyncio.create_task(_pub()))
+                return fut.result(timeout=300)
+            except Exception as exc:
+                return False, str(exc)
+
+        from config.constants import TASKS_DB_FILENAME
+        from services.task_store import TaskStore
+
+        data_dir = os.environ.get("FLET_APP_STORAGE_DATA") or os.getcwd()
+        store = TaskStore(os.path.join(data_dir, TASKS_DB_FILENAME))
+
+        def ydl_option_provider():
+            s = getattr(page, "_app_settings", None)
+            if s is None:
+                return {}
+            rate = int(getattr(s, "rate_limit_kbps", 0) or 0)
+            return {
+                "retries": int(getattr(s, "retry_count", 5) or 5),
+                "concurrent_fragments": int(getattr(s, "concurrent_fragments", 4) or 4),
+                "rate_limit": str(rate * 1024) if rate > 0 else None,
+                "writesubtitles": bool(getattr(s, "write_subtitles", False)),
+            }
+
+        mgr = DownloadManager(
+            max_concurrent=max_c,
+            cookie_path=cookie_path,
+            get_staging_dir=staging,
+            on_task_changed=on_task_changed,
+            publish_result=publish_sync,
+            task_store=store,
+            ydl_option_provider=ydl_option_provider,
+        )
+        mgr.restore_from_store()
+        setattr(page, "_download_manager", mgr)
+        setattr(page, "_task_store", store)
+        bump_tasks()
+        return mgr
+
+    def start_download(url: str, format_selector: str | None = None):
         if not url:
             set_status_text("Please enter a valid URL!")
             return
@@ -435,69 +473,31 @@ def App(page: ft.Page):
             set_status_text("Not a recognized or supported video link.")
             return
 
-        async def download_flow():
-            set_download_busy("Fetching video...")
+        mgr = get_download_manager()
+        settings = getattr(page, "_app_settings", None)
+        if settings:
+            mgr.set_max_concurrent(getattr(settings, "max_concurrent", 1))
 
-            directory, metadata = ensure_storage_paths(page)
-            cookie_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
-            from downloader import run_download
+        title = ""
+        platform = "Video"
+        thumb = ""
+        if analysis and isinstance(analysis, dict) and analysis.get("ok"):
+            title = analysis.get("title") or ""
+            platform = analysis.get("platform") or "Video"
+            thumb = analysis.get("thumbnail") or ""
 
-            had_error = [False]
+        task = mgr.enqueue(
+            url,
+            format_selector=format_selector,
+            title=title,
+            platform=platform,
+            thumbnail_url=thumb,
+        )
+        set_status_text(f"Queued: {title or url}")
+        bump_tasks()
+        # Switch user attention to Downloading tab
+        set_active_tab(1)
 
-            # Use default-arg capture to avoid late-binding lambda bugs
-            def on_status(message, _set=set_status_text):
-                if message.startswith("Downloading:"):
-                    page.loop.call_soon_threadsafe(_set, "Downloading video...")
-                else:
-                    page.loop.call_soon_threadsafe(_set, message)
-
-            def on_progress(value, _set=set_progress_val):
-                page.loop.call_soon_threadsafe(_set, value)
-
-            def on_error(message, _had=had_error, _set=set_status_text):
-                _had[0] = True
-                page.loop.call_soon_threadsafe(set_download_completed, False)
-                page.loop.call_soon_threadsafe(_set, f"Error: {message}")
-
-            def on_finish():
-                pass
-
-            class DummyPage:
-                def update(self):
-                    pass
-
-            download_result = await asyncio.to_thread(
-                run_download,
-                url,
-                directory,
-                cookie_path,
-                metadata,
-                on_status,
-                on_progress,
-                on_finish,
-                on_error,
-                DummyPage(),
-                None,
-            )
-
-            is_done = False
-            if download_result and not had_error[0]:
-                try:
-                    ok, error = await publish_download_result(page, download_result, metadata)
-                except Exception as exc:
-                    ok, error = False, str(exc)
-                if ok:
-                    engine = (download_result or {}).get("engine", "yt-dlp")
-                    set_download_completed(True)
-                    set_status_text(f"Video saved to Gallery ({engine}).")
-                    is_done = True
-                else:
-                    set_download_completed(False)
-                    set_status_text(f"Error: {error}")
-
-            finish_download(is_done)
-
-        asyncio.create_task(download_flow())
 
     if playing_file:
         from downloader import load_metadata
@@ -516,18 +516,121 @@ def App(page: ft.Page):
             on_close=lambda e: set_playing_file(None),
         )
     elif active_tab == 0:
+        from views.home_view import HomeView
+
+        async def do_analyze(u: str):
+            from downloader import analyze_media
+
+            cookie_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
+            result = await asyncio.to_thread(analyze_media, u, cookie_path)
+            set_analysis(result)
+            if result and result.get("ok") and not result.get("is_playlist"):
+                set_quality_label("Best available")
+                setattr(page, "_selected_format_selector", None)
+                settings = getattr(page, "_app_settings", None)
+                default_q = getattr(settings, "default_quality", "best") if settings else "best"
+                if default_q and default_q != "best":
+                    # Match e.g. "1080" or "1080p" against option heights
+                    digits = "".join(c for c in str(default_q) if c.isdigit())
+                    if digits:
+                        want = int(digits)
+                        for opt in result.get("quality_options") or []:
+                            if opt.get("height") == want:
+                                set_quality_label(opt.get("label") or f"{want}p")
+                                setattr(
+                                    page,
+                                    "_selected_format_selector",
+                                    f"bv*[height<={want}]+ba/b[height<={want}]/best",
+                                )
+                                break
+            return result
+
+        def select_quality(opt: dict):
+            set_quality_label(opt.get("label") or "Best available")
+            height = opt.get("height") or 0
+            fid = opt.get("format_id") or ""
+            if opt.get("audio_only") or height == -1:
+                setattr(page, "_selected_format_selector", "bestaudio/best")
+            elif not height:
+                setattr(page, "_selected_format_selector", None)
+            elif fid:
+                setattr(
+                    page,
+                    "_selected_format_selector",
+                    f"{fid}+bestaudio/best[height<={height}]/best",
+                )
+            else:
+                setattr(
+                    page,
+                    "_selected_format_selector",
+                    f"bv*[height<={height}]+ba/b[height<={height}]/best",
+                )
+
         content_view = HomeView(
+            page=page,
             status_text_val=status_text,
             progress_val=progress_val,
             progress_visible=progress_visible,
             download_disabled=download_disabled,
-            on_download_click=start_download,
-            page=page,
+            on_download=start_download,
+            on_analyze=do_analyze,
+            analysis=analysis,
+            selected_quality_label=quality_label,
+            on_select_quality=select_quality,
+            on_clear_analysis=lambda: set_analysis(None),
         )
-    else:
+    elif active_tab == 1:
+        from views.downloading_view import DownloadingView
+
+        mgr = getattr(page, "_download_manager", None)
+        tasks = mgr.list_tasks() if mgr else []
+        # reference tasks_tick so UI refreshes when downloads progress
+        _ = tasks_tick
+        content_view = DownloadingView(
+            tasks=tasks,
+            on_cancel=lambda tid: (mgr.cancel(tid) if mgr else None, bump_tasks()),
+            on_retry=lambda tid: (mgr.retry(tid) if mgr else None, bump_tasks()),
+        )
+    elif active_tab == 2:
         from library import LibraryView
 
         directory, metadata = ensure_storage_paths(page)
+
+        async def share_item(file_name: str, url: str):
+            if not url:
+                return
+            try:
+                # Prefer system share when Share service exists
+                share = getattr(page, "_share", None)
+                if share is None and hasattr(ft, "Share"):
+                    share = ft.Share()
+                    setattr(page, "_share", share)
+                    try:
+                        page.services.append(share)
+                    except Exception:
+                        pass
+                if share is not None and hasattr(share, "share"):
+                    await share.share(url, subject=file_name)
+                    return
+            except Exception:
+                pass
+            try:
+                clip = getattr(page, "_clipboard", None)
+                if clip is None:
+                    clip = ft.Clipboard()
+                    setattr(page, "_clipboard", clip)
+                await clip.set(url)
+                snack = ft.SnackBar(
+                    content=ft.Text("Link copied to clipboard"),
+                    open=True,
+                    duration=2000,
+                    behavior=ft.SnackBarBehavior.FLOATING,
+                )
+                page.overlay.append(snack)
+                page.update()
+            except Exception:
+                pass
+
         content_view = LibraryView(
             download_dir=directory,
             metadata_path=metadata,
@@ -537,6 +640,53 @@ def App(page: ft.Page):
             refresh_trigger=refresh_trigger,
             delete_from_storage=lambda info: delete_saved_video(page, info),
             sync_from_storage=lambda: sync_saved_videos(page, metadata),
+            on_share=lambda fn, u: asyncio.create_task(share_item(fn, u)),
+        )
+    else:
+        from config.settings import AppSettings, SettingsRepository
+        from views.settings_view import SettingsView
+
+        data_dir = os.environ.get("FLET_APP_STORAGE_DATA") or os.getcwd()
+        repo = SettingsRepository(data_dir)
+        app_settings = getattr(page, "_app_settings", None)
+        if app_settings is None:
+            app_settings = repo.load()
+            setattr(page, "_app_settings", app_settings)
+            setattr(page, "_settings_repo", repo)
+
+        def on_settings_changed(s):
+            setattr(page, "_app_settings", s)
+            repo.save(s)
+            try:
+                from config.theme import apply_theme_mode
+
+                apply_theme_mode(page, s.theme_mode)
+            except Exception:
+                pass
+            nsvc = getattr(page, "_notification_service", None)
+            if nsvc is not None:
+                nsvc.set_enabled(getattr(s, "notifications_enabled", True))
+            page.update()
+
+        def clear_finished():
+            mgr = getattr(page, "_download_manager", None)
+            if mgr is None:
+                return
+            mgr.clear_finished()
+            bump_tasks()
+
+        def request_notif_perm():
+            nsvc = getattr(page, "_notification_service", None)
+            if nsvc is None:
+                return
+            asyncio.create_task(nsvc.request_permission())
+
+        content_view = SettingsView(
+            settings=app_settings,
+            on_settings_changed=on_settings_changed,
+            on_clear_finished=clear_finished,
+            data_dir=data_dir,
+            on_request_notification_permission=request_notif_perm,
         )
 
     return ft.SafeArea(content=content_view, expand=True)
@@ -546,24 +696,54 @@ async def main(page: ft.Page):
     await init_storage_paths(page)
     ensure_media_scanner(page)
 
+    try:
+        from services.notification_service import NotificationService
+
+        nsvc = NotificationService(page)
+        nsvc.attach(page)
+        setattr(page, "_notification_service", nsvc)
+        settings = getattr(page, "_app_settings", None)
+        if settings is not None:
+            nsvc.set_enabled(getattr(settings, "notifications_enabled", True))
+    except Exception:
+        pass
+
     page.title = "Vidsaver"
     page.padding = 0
     page.spacing = 0
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.theme = ft.Theme(
-        scrollbar_theme=ft.ScrollbarTheme(
-            thickness=6,
-            radius=4,
-            interactive=True,
-        )
-    )
     page.navigation_bar = None
-    page.appbar = ft.AppBar(
-        title=ft.Text("Vidsaver", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD),
-        center_title=True,
-        bgcolor=ft.Colors.BLUE_700,
-    )
+
+    # Theme + fonts (Phase 2)
+    data_dir = os.environ.get("FLET_APP_STORAGE_DATA") or os.getcwd()
+    try:
+        from config.settings import SettingsRepository
+        from config.theme import PRIMARY, apply_theme_mode
+
+        repo = SettingsRepository(data_dir)
+        app_settings = repo.load()
+        setattr(page, "_app_settings", app_settings)
+        setattr(page, "_settings_repo", repo)
+        apply_theme_mode(page, app_settings.theme_mode)
+        page.appbar = ft.AppBar(
+            title=ft.Text("Vidsaver", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD),
+            center_title=True,
+            bgcolor=PRIMARY,
+        )
+    except Exception:
+        page.theme = ft.Theme(
+            scrollbar_theme=ft.ScrollbarTheme(
+                thickness=6,
+                radius=4,
+                interactive=True,
+            )
+        )
+        page.appbar = ft.AppBar(
+            title=ft.Text("Vidsaver", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD),
+            center_title=True,
+            bgcolor=ft.Colors.BLUE_700,
+        )
 
     page.render(App, page=page)
 

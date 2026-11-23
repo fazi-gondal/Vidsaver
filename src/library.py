@@ -13,7 +13,7 @@ VIDEO_EXTENSIONS = (".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".3gp")
 
 
 @ft.component
-def VideoCard(file_name: str, meta: dict, on_play, on_delete):
+def VideoCard(file_name: str, meta: dict, on_play, on_delete, on_share=None):
     """Styled card component representing one saved video."""
     info = meta.get(file_name, {})
     platform = info.get("platform", "Video")
@@ -21,6 +21,7 @@ def VideoCard(file_name: str, meta: dict, on_play, on_delete):
     thumb_color = PLATFORM_COLOR.get(platform, ft.Colors.BLUE_700)
     chip_color = PLATFORM_CHIP_COLOR.get(platform, ft.Colors.BLUE_100)
     source_path = info.get("source_path") or info.get("file_path") or ""
+    source_url = str(info.get("url") or "")
 
     thumb = ft.Container(
         width=72,
@@ -81,6 +82,13 @@ def VideoCard(file_name: str, meta: dict, on_play, on_delete):
                     thumb,
                     info_col,
                     ft.IconButton(
+                        icon=ft.Icons.SHARE_OUTLINED,
+                        icon_color=ft.Colors.GREY_600,
+                        tooltip="Share link",
+                        visible=bool(source_url),
+                        on_click=lambda e, fn=file_name, u=source_url: on_share(fn, u) if on_share else None,
+                    ),
+                    ft.IconButton(
                         icon=ft.Icons.DELETE_OUTLINE,
                         icon_color=ft.Colors.RED_400,
                         tooltip="Delete",
@@ -108,6 +116,7 @@ def LibraryView(
     refresh_trigger=0,
     delete_from_storage=None,
     sync_from_storage=None,
+    on_share=None,
 ):
     """
     Declarative component for the downloads library.
@@ -118,6 +127,9 @@ def LibraryView(
     files, set_files = ft.use_state([])
     meta, set_meta = ft.use_state({})
     deleting_file, set_deleting_file = ft.use_state(None)
+    search_query, set_search_query = ft.use_state("")
+    platform_filter, set_platform_filter = ft.use_state("All")
+    sort_mode, set_sort_mode = ft.use_state("newest")  # newest | oldest | name
     list_ref = ft.use_ref()
 
     def sort_key(item, loaded_meta):
@@ -212,6 +224,35 @@ def LibraryView(
         else None
     )
 
+    q = (search_query or "").strip().lower()
+    filtered = []
+    platforms = {"All"}
+    for file_name in files:
+        info = meta.get(file_name, {})
+        plat = str(info.get("platform") or "Video")
+        platforms.add(plat)
+        if platform_filter and platform_filter != "All" and plat != platform_filter:
+            continue
+        if q:
+            title = os.path.splitext(file_name)[0].lower()
+            hay = f"{title} {plat} {info.get('url', '')}".lower()
+            if q not in hay:
+                continue
+        filtered.append(file_name)
+
+    def _name_key(fn):
+        return os.path.splitext(fn)[0].lower()
+
+    def _date_key(fn):
+        return sort_key(fn, meta)
+
+    if sort_mode == "oldest":
+        filtered.sort(key=_date_key)
+    elif sort_mode == "name":
+        filtered.sort(key=_name_key)
+    else:
+        filtered.sort(key=_date_key, reverse=True)
+
     list_controls = []
     if not files:
         list_controls.append(
@@ -233,19 +274,73 @@ def LibraryView(
                 padding=40,
             )
         )
+    elif not filtered:
+        list_controls.append(
+            ft.Container(
+                content=ft.Text("No matches", color=ft.Colors.GREY, size=14),
+                alignment=ft.Alignment(0, 0),
+                padding=24,
+            )
+        )
     else:
-        for file_name in files:
+        for file_name in filtered:
             list_controls.append(
                 VideoCard(
                     file_name=file_name,
                     meta=meta,
                     on_play=on_play,
                     on_delete=set_deleting_file,
+                    on_share=on_share,
                 )
             )
 
+    platform_options = sorted(platforms, key=lambda p: (p != "All", p))
+
     return ft.Column(
         controls=[
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.TextField(
+                            value=search_query,
+                            label="Search",
+                            prefix_icon=ft.Icons.SEARCH,
+                            dense=True,
+                            on_change=lambda e: set_search_query(e.control.value or ""),
+                            border=ft.OutlineInputBorder(
+                                border_radius=ft.BorderRadius(12, 12, 12, 12)
+                            ),
+                        ),
+                        ft.Row(
+                            [
+                                ft.Dropdown(
+                                    value=platform_filter if platform_filter in platform_options else "All",
+                                    dense=True,
+                                    width=130,
+                                    label="Platform",
+                                    options=[ft.dropdown.Option(p) for p in platform_options],
+                                    on_change=lambda e: set_platform_filter(e.control.value or "All"),
+                                ),
+                                ft.Dropdown(
+                                    value=sort_mode,
+                                    dense=True,
+                                    width=130,
+                                    label="Sort",
+                                    options=[
+                                        ft.dropdown.Option("newest", "Newest"),
+                                        ft.dropdown.Option("oldest", "Oldest"),
+                                        ft.dropdown.Option("name", "Name"),
+                                    ],
+                                    on_change=lambda e: set_sort_mode(e.control.value or "newest"),
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                    ],
+                    spacing=8,
+                ),
+                padding=ft.Padding(left=12, right=12, top=8, bottom=4),
+            ),
             ft.ListView(
                 ref=list_ref,
                 controls=list_controls,
@@ -253,7 +348,7 @@ def LibraryView(
                 spacing=0,
                 padding=0,
                 on_scroll=lambda e: on_scroll_change(e.pixels) if on_scroll_change else None,
-            )
+            ),
         ],
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         expand=True,

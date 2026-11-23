@@ -185,6 +185,163 @@ def download_tiktok_direct(url: str, target_dir: str, on_status, on_progress) ->
         return None
 
 
+
+def analyze_media(url: str, cookie_path: str) -> dict | None:
+    """
+    Extract metadata and available formats without downloading.
+    Returns a dict suitable for Home preview UI, or None on failure.
+    """
+    url = resolve_short_url(url)
+    platform = detect_platform(url)
+
+    is_likely_playlist = any(
+        token in url.lower()
+        for token in ("list=", "/playlist", "/sets/", "playlist?")
+    )
+    ydl_opts: Any = {
+        "quiet": True,
+        "no_warnings": True,
+        **({"ratelimit": rate_limit} if rate_limit else {}),
+        "skip_download": True,
+        "noplaylist": not is_likely_playlist,
+        "socket_timeout": 15,
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+        },
+    }
+    if cookie_path and os.path.exists(cookie_path):
+        ydl_opts["cookiefile"] = cookie_path
+
+    try:
+        from yt_dlp import YoutubeDL
+
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+            "url": url,
+            "platform": platform,
+        }
+
+    if not info:
+        return {"ok": False, "error": "No media information returned.", "url": url, "platform": platform}
+
+    # Playlist: return entries summary for Phase 3 selection
+    if info.get("_type") == "playlist" or info.get("entries"):
+        entries = list(info.get("entries") or [])
+        items = []
+        for e in entries[:50]:
+            if not e:
+                continue
+            items.append(
+                {
+                    "id": e.get("id") or "",
+                    "title": e.get("title") or "Untitled",
+                    "url": e.get("webpage_url") or e.get("url") or url,
+                    "duration": e.get("duration"),
+                    "thumbnail": e.get("thumbnail") or "",
+                }
+            )
+        return {
+            "ok": True,
+            "is_playlist": True,
+            "url": url,
+            "platform": platform,
+            "title": info.get("title") or "Playlist",
+            "entries": items,
+            "entry_count": len(items),
+        }
+
+    formats_raw = info.get("formats") or []
+    quality_options: list[dict] = []
+    seen_heights: set[int] = set()
+    best_by_height: dict[int, dict] = {}
+    for f in formats_raw:
+        height = f.get("height")
+        if not height:
+            continue
+        vcodec = f.get("vcodec") or "none"
+        if vcodec == "none":
+            continue
+        h = int(height)
+        tbr = float(f.get("tbr") or 0)
+        prev = best_by_height.get(h)
+        if prev is None or tbr >= float(prev.get("tbr") or 0):
+            fps = f.get("fps")
+            label = f"{h}p"
+            if fps:
+                try:
+                    label = f"{h}p · {int(float(fps))}fps"
+                except (TypeError, ValueError):
+                    pass
+            best_by_height[h] = {
+                "height": h,
+                "format_id": str(f.get("format_id") or ""),
+                "ext": f.get("ext") or "mp4",
+                "label": label,
+                "tbr": f.get("tbr"),
+                "fps": fps,
+                "vcodec": vcodec,
+                "acodec": f.get("acodec") or "none",
+            }
+    quality_options = sorted(best_by_height.values(), key=lambda x: x["height"], reverse=True)
+
+    # Always offer a sensible default "best" option at the top
+    quality_options.insert(
+        0,
+        {
+            "height": 0,
+            "format_id": "",
+            "ext": "mp4",
+            "label": "Best available",
+            "tbr": None,
+            "fps": None,
+            "vcodec": "",
+            "acodec": "",
+        },
+    )
+    # Audio-only convenience
+    quality_options.append(
+        {
+            "height": -1,
+            "format_id": "bestaudio",
+            "ext": "m4a",
+            "label": "Audio only",
+            "tbr": None,
+            "fps": None,
+            "vcodec": "none",
+            "acodec": "best",
+            "audio_only": True,
+        },
+    )
+
+    thumb = info.get("thumbnail") or ""
+    if not thumb and info.get("thumbnails"):
+        try:
+            thumb = info["thumbnails"][-1].get("url") or ""
+        except Exception:
+            thumb = ""
+
+    return {
+        "ok": True,
+        "is_playlist": False,
+        "url": url,
+        "platform": platform,
+        "title": info.get("title") or "Video",
+        "duration": info.get("duration"),
+        "thumbnail": thumb,
+        "uploader": info.get("uploader") or info.get("channel") or "",
+        "quality_options": quality_options,
+        "webpage_url": info.get("webpage_url") or url,
+    }
+
+
 def run_download(
     url: str,
     target_dir: str,
@@ -196,6 +353,11 @@ def run_download(
     on_error,
     page,
     schedule_media_scan_later=None,
+    format_selector: str | None = None,
+    retries: int | None = None,
+    concurrent_fragments: int | None = None,
+    rate_limit: str | None = None,
+    writesubtitles: bool = False,
 ):
     """
     Execute a yt-dlp download synchronously in a worker thread.
@@ -220,19 +382,40 @@ def run_download(
             raw = d.get("_percent_str", "0%")
             pct_str = clean_ansi(raw).replace("%", "").strip()
             try:
-                on_progress(float(pct_str) / 100.0)
+                fraction = float(pct_str) / 100.0
             except ValueError:
-                pass
+                fraction = 0.0
+            # Prefer numeric fields when yt-dlp provides them
+            downloaded = d.get("downloaded_bytes") or 0
+            total = d.get("total_bytes") or d.get("total_bytes_estimate")
+            speed = d.get("speed")
+            eta = d.get("eta")
+            try:
+                on_progress(
+                    {
+                        "fraction": fraction,
+                        "downloaded_bytes": int(downloaded or 0),
+                        "total_bytes": int(total) if total else None,
+                        "speed_bytes_per_sec": float(speed) if speed else None,
+                        "eta_seconds": float(eta) if eta is not None else None,
+                    }
+                )
+            except TypeError:
+                # Legacy callbacks that only accept a float
+                try:
+                    on_progress(fraction)
+                except Exception:
+                    pass
             on_status(f"Downloading: {raw.strip()}")
-            # NOTE: page.update() must NOT be called from a worker thread.
-            # The on_status/on_progress callbacks dispatch via call_soon_threadsafe.
         elif d["status"] == "finished":
             filename = d.get("filename")
             if filename:
                 downloaded_paths.append(filename)
-            on_progress(1.0)
+            try:
+                on_progress({"fraction": 1.0})
+            except TypeError:
+                on_progress(1.0)
             on_status("Preparing file...")
-            # NOTE: page.update() removed — thread-unsafe here.
 
     os.makedirs(target_dir, exist_ok=True)
 
@@ -241,19 +424,21 @@ def run_download(
         "progress_hooks": [_hook],
         "cookiefile": cookie_path,
         "updatetime": False,
-        "format": "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b/best",
-        "writesubtitles": False,
-        "writeautomaticsub": False,
+        "format": format_selector
+        or "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b/best",
+        "writesubtitles": bool(writesubtitles),
+        "writeautomaticsub": bool(writesubtitles),
         "writethumbnail": False,
         "noplaylist": True,
         "sleep_interval": 0,
         "max_sleep_interval": 0,
         "socket_timeout": 10,
-        "retries": 2,
-        "fragment_retries": 2,
-        "concurrent_fragment_downloads": 4,
+        "retries": retries if retries is not None else 2,
+        "fragment_retries": retries if retries is not None else 2,
+        "concurrent_fragment_downloads": concurrent_fragments if concurrent_fragments is not None else 4,
         "quiet": True,
         "no_warnings": True,
+        **({"ratelimit": rate_limit} if rate_limit else {}),
         "http_headers": {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
