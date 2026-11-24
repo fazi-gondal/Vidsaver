@@ -266,7 +266,7 @@ The app saves through MediaStore to `Movies/Vidsaver`. Some Gallery apps may tak
 
 ### `DeprecationWarning` On Startup
 
-All Flet 1.0 deprecations have been resolved. If you see any, check that you are running the latest `main` and that `flet==1.0` is installed.
+All Flet 1.1.2 deprecations have been resolved. If you see any, check that you are running the latest `main` and that `flet==1.1.2` is installed.
 
 ## Useful Links
 
