@@ -162,6 +162,8 @@ If your application needs more comprehensive media library functionality such as
 
 Vidsaver uses the package to integrate downloaded media with Android's native **MediaStore**, allowing videos to be saved, scanned, listed, and managed without relying on a separate media-management layer.
 
+Vidsaver's desktop and web development clients do not bundle this Android-only extension. It is guarded during those runs and is included in the GitHub-built Windows and Android release clients.
+
 This makes `flet-media-scanner` part of a real-world Flet application and demonstrates how the package can be used for native Android media integration in production-style projects.
 
 **Vidsaver:** https://github.com/fazi-gondal/Vidsaver

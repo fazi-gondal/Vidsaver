@@ -5,6 +5,30 @@ Vidsaver is a cross-platform video downloader built with **Python 3.14** and **F
 
 **Download TikTok and Instagram reels without watermark in Full HD.**
 
+## Project Completion
+
+**Implementation and local verification: approximately 90% complete.**
+
+| Area | Status |
+|---|---|
+| Home URL input, paste, analysis and quality/playlist selection | Complete |
+| Independent download queue, cancellation and retry | Complete |
+| Downloading and Completed screens | Complete |
+| Settings and persistent SQLite task storage | Complete |
+| Windows and Android CI/CD workflows | Complete |
+| Custom Android MediaStore extension | Complete |
+| Desktop and web runtime smoke tests | Complete |
+| Unit tests and source compilation | Complete |
+| Android hardware/ARM64 device testing | Remaining |
+| Signed release build and installation verification | Remaining |
+| Real-device MediaStore, notification and background-download testing | Remaining |
+
+### Overall estimate
+
+- **Code, UI and local verification: ~90% done**
+- **Remaining work: ~10%**, consisting mainly of physical Android device testing and final signed release validation
+- **Do not require local Flutter SDK builds**: final Windows and Android builds are handled by GitHub Actions
+
 ## Features
 
 - Download videos from all platforms supported by `yt-dlp` (TikTok, Instagram, YouTube, Twitter/X, Facebook, and more)
@@ -111,25 +135,25 @@ The normal Android 13+ download flow does not request storage or media permissio
 "android.permission.INTERNET" = true
 ```
 
-## Build Locally
+## Development And Final Builds
 
-Android arm64 APK:
-
-```bash
-uv run flet build apk --split-per-abi --arch arm64-v8a --source-packages packages/flet-media-scanner --yes --verbose
-```
-
-Windows:
+For normal development, use Flet's desktop or Android companion run:
 
 ```bash
-uv run flet build windows --source-packages packages/flet-media-scanner --yes --verbose
+uv run flet run
+uv run flet run --android --port 49152
 ```
 
-Build the Windows installer locally (requires [Inno Setup](https://jrsoftware.org/isinfo.php)):
+Do not run local Flutter/Flet production builds just to test the final app. Vidsaver's final Windows and Android packages are built by [GitHub Actions](.github/workflows/all-builds.yml). Local Flutter SDK downloads and local APK builds are intentionally unnecessary.
 
-```bash
-ISCC.exe /DAppExe=vidsaver.exe /DAppVersion=1.3.3 /DAppArch=x64 packages\windows\installer.iss
+If port `8551` is already in use, pass another unused port. For example:
+
+```powershell
+$env:PYTHONIOENCODING="utf-8"
+uv run --directory src flet run --android --port 49152 --verbose
 ```
+
+The stock `flet run --android` companion is a development host and may not contain Vidsaver's custom MediaStore extension. Gallery publishing is verified through the GitHub-built APK.
 
 ## GitHub Release Workflow
 
@@ -258,6 +282,16 @@ Files are saved with the video's title as the filename — no platform IDs appen
 ### `ModuleNotFoundError: certifi`
 
 Make sure the APK was built after `certifi`, `charset-normalizer`, `idna`, and `urllib3` were added to `pyproject.toml`.
+
+### Android run reports `WinError 10048` or port `8551` is in use
+
+Another Vidsaver or Flet process is already using port `8551`. Stop the older run with `Ctrl+C`, or choose a free port:
+
+```powershell
+uv run --directory src flet run --android --port 49152 --verbose
+```
+
+Do not stop a process until you confirm that it belongs to Vidsaver or to the development server you started.
 
 ### APK Installs As 32-bit
 
