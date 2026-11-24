@@ -1,7 +1,7 @@
 
 # Vidsaver
 
-Vidsaver is a cross-platform video downloader built with **Python 3.14** and **Flet 1.0**. It uses `yt-dlp` for download handling and provides a clean mobile/desktop UI for pasting a link, downloading, viewing saved videos, and deleting downloads.
+Vidsaver is a cross-platform video downloader built with **Python 3.14** and **Flet 1.1.2**. It uses `yt-dlp` for download handling and provides a clean mobile/desktop UI for pasting a link, downloading, viewing saved videos, and deleting downloads.
 
 **Download TikTok and Instagram reels without watermark in Full HD.**
 
@@ -9,15 +9,18 @@ Vidsaver is a cross-platform video downloader built with **Python 3.14** and **F
 
 - Download videos from all platforms supported by `yt-dlp` (TikTok, Instagram, YouTube, Twitter/X, Facebook, and more)
 - Android downloads are published through MediaStore to:
+
   ```text
   Movies/Vidsaver
   ```
+
 - Android videos appear in the Gallery without broad storage access or a media scan
 - Downloads library with video metadata, file size, platform chip, playback, and delete confirmation
 - Built-in video player powered by `flet-video`
 - Clipboard auto-paste — opens the paste bar when a supported video link is in the clipboard
 - Android APK release builds target `arm64-v8a`
 - GitHub Releases attach:
+
   ```text
   Vidsaver-vX.Y.Z-Windows.zip              (portable — extract and run)
   Vidsaver-vX.Y.Z-Windows-setup.exe        (Inno Setup installer — installs to C:\Program Files\Vidsaver)
@@ -139,7 +142,7 @@ Normal pushes to `main` do not trigger the release build.
 The workflow builds and publishes:
 
 | Target | Runner | Output |
-|---|---|---|
+| --- | --- | --- |
 | Windows | `windows-latest` | Portable `.zip` + Inno Setup `.exe` installer |
 | Android | `ubuntu-latest` | Signed `arm64-v8a` `.apk` + `.zip` |
 
@@ -200,12 +203,14 @@ Steps:
 3. Keep the default alias as `vidsaver`, or enter another alias.
 4. Download the `android-keystore-github-secrets` artifact.
 5. Copy each value from `android-keystore-github-secrets.txt` into GitHub repository secrets:
+
    ```text
    ANDROID_KEYSTORE_BASE64
    ANDROID_KEYSTORE_PASSWORD
    ANDROID_KEY_PASSWORD
    ANDROID_KEY_ALIAS
    ```
+
 6. Delete the artifact after copying the values. The workflow sets artifact retention to 1 day.
 
 After this one-time setup, future release APKs are signed automatically with the same key.
