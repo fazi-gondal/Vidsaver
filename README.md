@@ -112,7 +112,7 @@ uv run flet build windows --source-packages packages/flet-media-scanner --yes --
 Build the Windows installer locally (requires [Inno Setup](https://jrsoftware.org/isinfo.php)):
 
 ```bash
-ISCC.exe /DAppExe=vidsaver.exe /DAppVersion=1.3.3 /DAppArch=x64 packages\windows\installer.iss
+ISCC.exe /DAppExe=vidsaver.exe /DAppVersion=1.5.0 /DAppArch=x64 packages\windows\installer.iss
 ```
 
 ## GitHub Release Workflow
