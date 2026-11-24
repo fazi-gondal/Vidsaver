@@ -4,11 +4,15 @@ main.py - Vidsaver app entry point.
 
 import asyncio
 from datetime import datetime
+import importlib
+import logging
 import os
 import tempfile
 import time
 
 import flet as ft
+
+logger = logging.getLogger(__name__)
 
 VIDEO_EXTENSIONS = (".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".3gp")
 
@@ -136,9 +140,19 @@ def ensure_media_scanner(page: ft.Page):
         setattr(page, "_media_scanner_error", "")
         return None
 
-    try:
-        from flet_media_scanner import MediaScanner
+    if os.environ.get("FLET_FORCE_WEB_SERVER", "").lower() == "true":
+        error = (
+            "The stock flet run --android client does not include Vidsaver's "
+            "MediaScanner extension. Use the Android APK built by GitHub Actions "
+            "to publish downloads to the gallery."
+        )
+        setattr(page, "_media_scanner_error", error)
+        setattr(page, "_media_scanner", None)
+        print(f"[VidSaver] {error}")
+        return None
 
+    try:
+        MediaScanner = importlib.import_module("flet_media_scanner").MediaScanner
         scanner = MediaScanner()
         page.services.append(scanner)
         setattr(page, "_media_scanner", scanner)
@@ -252,7 +266,7 @@ def show_task_details(page: ft.Page, task) -> None:
         ),
         actions=[ft.TextButton("Close", on_click=lambda e: page.pop_dialog())],
     )
-    asyncio.create_task(page.show_dialog(dialog))
+    page.show_dialog(dialog)
 
 
 async def delete_saved_video(page: ft.Page, info: dict) -> bool:
@@ -363,7 +377,7 @@ def App(page: ft.Page):
                 behavior=ft.SnackBarBehavior.FLOATING,
                 margin=ft.Margin(left=16, top=0, right=16, bottom=10),
             )
-            asyncio.create_task(page.show_dialog(snack))
+            page.show_dialog(snack)
 
 
     def bump_tasks(_n=None):
@@ -386,56 +400,45 @@ def App(page: ft.Page):
         settings = getattr(page, "_app_settings", None)
         max_c = getattr(settings, "max_concurrent", 1) if settings else 1
 
+        async def update_ui_from_task(task):
+            from models.download_state import DownloadState
+
+            bump_tasks()
+            state = task.state
+            if state is DownloadState.COMPLETED:
+                n = int(getattr(page, "_lib_refresh", 0)) + 1
+                setattr(page, "_lib_refresh", n)
+                set_refresh_trigger(n)
+
+            nsvc = getattr(page, "_notification_service", None)
+            if nsvc is None:
+                return
+
+            mgr2 = getattr(page, "_download_manager", None)
+            active = sum(
+                1
+                for item in (mgr2.list_tasks() if mgr2 else [])
+                if item.is_active or item.state is DownloadState.PENDING
+            )
+            if state is DownloadState.DOWNLOADING and active:
+                await nsvc.start_download_session(task.title or "Vidsaver")
+                pct = task.progress.percent
+                body = f"{task.title or 'Download'}: {pct:.0f}%" if pct is not None else (task.title or "Downloading…")
+                await nsvc.update_progress(body)
+            elif state is DownloadState.COMPLETED:
+                await nsvc.notify_completed(task.title or "Video saved")
+                if active == 0:
+                    await nsvc.stop_download_session()
+            elif state in (DownloadState.FAILED, DownloadState.CANCELLED):
+                await nsvc.notify_failed(task.title or "Download", task.error)
+                if active == 0:
+                    await nsvc.stop_download_session()
+
         def on_task_changed(task):
-            # Bump tick on UI thread so DownloadingView re-renders
             try:
-                page.loop.call_soon_threadsafe(bump_tasks)
-                from models.download_state import DownloadState
-
-                state = getattr(task, "state", None)
-
-                def _notify_ui():
-                    nsvc = getattr(page, "_notification_service", None)
-                    if nsvc is None:
-                        return
-                    active = 0
-                    mgr2 = getattr(page, "_download_manager", None)
-                    if mgr2:
-                        active = sum(
-                            1
-                            for t in mgr2.list_tasks()
-                            if t.is_active or t.state is DownloadState.PENDING
-                        )
-                    if state is DownloadState.DOWNLOADING and active:
-                        asyncio.create_task(
-                            nsvc.start_download_session(task.title or "Vidsaver")
-                        )
-                        pct = task.progress.percent
-                        body = f"{task.title or 'Download'}: {pct:.0f}%" if pct is not None else (task.title or "Downloading…")
-                        asyncio.create_task(nsvc.update_progress(body))
-                    elif state is DownloadState.COMPLETED:
-                        asyncio.create_task(nsvc.notify_completed(task.title or "Video saved"))
-                        if active == 0:
-                            asyncio.create_task(nsvc.stop_download_session())
-                    elif state in (DownloadState.FAILED, DownloadState.CANCELLED):
-                        asyncio.create_task(
-                            nsvc.notify_failed(task.title or "Download", task.error)
-                        )
-                        if active == 0:
-                            asyncio.create_task(nsvc.stop_download_session())
-
-                page.loop.call_soon_threadsafe(_notify_ui)
-
-                if state is DownloadState.COMPLETED:
-
-                    def _refresh():
-                        n = int(getattr(page, "_lib_refresh", 0)) + 1
-                        setattr(page, "_lib_refresh", n)
-                        set_refresh_trigger(n)
-
-                    page.loop.call_soon_threadsafe(_refresh)
+                page.run_task(update_ui_from_task, task)
             except Exception:
-                pass
+                logger.exception("Could not schedule download task UI update")
 
         def publish_sync(result: dict):
             # Bridge async publish into worker via concurrent future
@@ -669,7 +672,7 @@ def App(page: ft.Page):
                     duration=2000,
                     behavior=ft.SnackBarBehavior.FLOATING,
                 )
-                asyncio.create_task(page.show_dialog(snack))
+                page.show_dialog(snack)
             except Exception:
                 pass
 

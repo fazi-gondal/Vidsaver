@@ -101,7 +101,7 @@ def HomeView(
 
         def pick(opt):
             on_select_quality(opt)
-            asyncio.create_task(page.pop_dialog())
+            page.pop_dialog()
 
         sheet = ft.BottomSheet(
             content=ft.Container(
@@ -138,7 +138,7 @@ def HomeView(
             ),
             open=True,
         )
-        asyncio.create_task(page.show_dialog(sheet))
+        page.show_dialog(sheet)
 
     # Playlist list + bulk enqueue
     playlist_block = None
