@@ -21,6 +21,10 @@ PLATFORM_COLOR = {
     "YouTube": ft.Colors.RED_700,
     "Twitter/X": ft.Colors.BLUE_GREY_800,
     "Facebook": ft.Colors.BLUE_800,
+    "Snapchat": ft.Colors.AMBER_800,
+    "Reddit": ft.Colors.DEEP_ORANGE_700,
+    "Pinterest": ft.Colors.RED_800,
+    "Threads": ft.Colors.GREY_900,
     "Video": ft.Colors.BLUE_700,
 }
 PLATFORM_CHIP_COLOR = {
@@ -29,6 +33,10 @@ PLATFORM_CHIP_COLOR = {
     "YouTube": ft.Colors.RED_100,
     "Twitter/X": ft.Colors.BLUE_GREY_100,
     "Facebook": ft.Colors.BLUE_100,
+    "Snapchat": ft.Colors.AMBER_100,
+    "Reddit": ft.Colors.DEEP_ORANGE_100,
+    "Pinterest": ft.Colors.RED_100,
+    "Threads": ft.Colors.GREY_200,
     "Video": ft.Colors.BLUE_100,
 }
 
@@ -39,14 +47,22 @@ def detect_platform(url: str) -> str:
     u = url.lower()
     if "tiktok.com" in u:
         return "TikTok"
-    if "instagram.com" in u:
+    if "instagram.com" in u or "instagr.am" in u:
         return "Instagram"
     if "youtube.com" in u or "youtu.be" in u:
         return "YouTube"
-    if "twitter.com" in u or "x.com" in u:
+    if "twitter.com" in u or "x.com" in u or "t.co/" in u:
         return "Twitter/X"
-    if "facebook.com" in u or "fb.com" in u:
+    if "facebook.com" in u or "fb.com" in u or "fb.watch" in u:
         return "Facebook"
+    if "snapchat.com" in u:
+        return "Snapchat"
+    if "reddit.com" in u or "redd.it" in u:
+        return "Reddit"
+    if "pinterest.com" in u or "pin.it" in u:
+        return "Pinterest"
+    if "threads.net" in u or "threads.com" in u:
+        return "Threads"
     return "Video"
 
 
@@ -72,9 +88,25 @@ def save_metadata(metadata_path: str, meta: dict):
         pass
 
 
+SHORT_URL_HOSTS = (
+    "tiktok.com",
+    "fb.watch",
+    "fb.com",
+    "facebook.com/share/",
+    "t.co/",
+    "t.snapchat.com",
+    "snapchat.com/t/",
+    "instagr.am",
+    "pin.it",
+    "redd.it",
+    "dai.ly",
+)
+
+
 def resolve_short_url(url: str) -> str:
-    """Follow redirects for short TikTok links. Lazy-imports requests."""
-    if "tiktok.com" in url:
+    """Follow redirects for short share links (TikTok, Facebook, Snapchat, X, etc.)."""
+    u = url.lower()
+    if any(host in u for host in SHORT_URL_HOSTS):
         import requests
 
         try:
@@ -86,7 +118,8 @@ def resolve_short_url(url: str) -> str:
                 )
             }
             response = requests.head(url, headers=headers, allow_redirects=True, timeout=10)
-            return response.url
+            if response.url and response.url.startswith(("http://", "https://")):
+                return response.url
         except Exception:
             pass
     return url
@@ -207,11 +240,7 @@ def run_download(
     """
     del metadata_path, on_finish, schedule_media_scan_later
 
-    if not os.path.exists(cookie_path):
-        on_status("Error: 'cookies.txt' file missing!")
-        return None
-
-    # Resolve shortened URLs (e.g. vt.tiktok.com) to full destination URL
+    # Resolve shortened/share URLs (e.g. vt.tiktok.com, fb.watch, facebook.com/share, t.snapchat.com)
     url = resolve_short_url(url)
 
     downloaded_paths = []
@@ -248,7 +277,6 @@ def run_download(
     ydl_opts: Any = {
         "outtmpl": os.path.join(target_dir, "%(title).100s.%(ext)s"),
         "progress_hooks": [_hook],
-        "cookiefile": cookie_path,
         "updatetime": False,
         "format": format_spec,
         "writesubtitles": False,
@@ -276,6 +304,8 @@ def run_download(
             "Accept-Language": "en-US,en;q=0.5",
         },
     }
+    if cookie_path and os.path.exists(cookie_path):
+        ydl_opts["cookiefile"] = cookie_path
 
     before = {
         f: os.path.getmtime(os.path.join(target_dir, f))
@@ -329,8 +359,9 @@ def run_download(
                         "date": datetime.now().strftime("%d %b %Y"),
                         "engine": "Backup HD API",
                     }
+            platform = detect_platform(url)
             on_error(
-                "No video file was saved. Instagram may require fresh cookies, "
+                f"No video file was saved. {platform} may require fresh cookies, "
                 "login access, or the link may not contain a downloadable video."
             )
             return None

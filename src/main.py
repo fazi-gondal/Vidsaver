@@ -7,6 +7,7 @@ from datetime import datetime
 import os
 import tempfile
 import time
+from urllib.parse import urlparse
 
 import flet as ft
 
@@ -17,12 +18,32 @@ VIDEO_DOMAINS = (
     "vm.tiktok.com",
     "vt.tiktok.com",
     "instagram.com",
+    "instagr.am",
     "youtube.com",
     "youtu.be",
     "twitter.com",
     "x.com",
+    "t.co",
     "facebook.com",
     "fb.com",
+    "fb.watch",
+    "snapchat.com",
+    "reddit.com",
+    "v.redd.it",
+    "redd.it",
+    "pinterest.com",
+    "pin.it",
+    "threads.net",
+    "threads.com",
+    "vimeo.com",
+    "dailymotion.com",
+    "dai.ly",
+    "twitch.tv",
+    "linkedin.com",
+    "likee.video",
+    "snackvideo.com",
+    "bilibili.com",
+    "b23.tv",
 )
 
 
@@ -32,13 +53,18 @@ def is_android_page(page: ft.Page) -> bool:
     return platform == ft.PagePlatform.ANDROID or platform_value == "android"
 
 
-def is_video_url(text: str) -> bool:
+def is_http_url(text: str) -> bool:
     if not text:
         return False
-    value = text.strip()
-    return value.startswith(("http://", "https://")) and any(
-        domain in value for domain in VIDEO_DOMAINS
-    )
+    parsed = urlparse(text.strip())
+    return parsed.scheme.lower() in ("http", "https") and bool(parsed.netloc)
+
+
+def is_video_url(text: str) -> bool:
+    if not is_http_url(text):
+        return False
+    value = text.strip().lower()
+    return any(domain in value for domain in VIDEO_DOMAINS)
 
 
 def ensure_storage_paths(page: ft.Page):
@@ -431,7 +457,7 @@ def App(page: ft.Page):
             set_status_text("Please enter a valid URL!")
             return
 
-        if not is_video_url(url):
+        if not is_http_url(url):
             set_status_text("Not a recognized or supported video link.")
             return
 
