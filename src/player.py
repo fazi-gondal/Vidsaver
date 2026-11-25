@@ -17,6 +17,7 @@ def PlayerView(file_path: str, on_close):
     playback. ft.use_memo only recreates it when file_path changes.
     """
     file_name = os.path.basename(file_path)
+    play_error, set_play_error = ft.use_state("")
 
     # Memoize the Video control — prevents recreation (and playback reset)
     # on every re-render triggered by parent state changes.
@@ -25,6 +26,7 @@ def PlayerView(file_path: str, on_close):
             expand=True,
             autoplay=True,
             playlist=[ftv.VideoMedia(file_path)],
+            on_error=lambda e: set_play_error(str(getattr(e, "data", "") or "Unable to play video.")),
         ),
         dependencies=[file_path],
     )
@@ -52,7 +54,16 @@ def PlayerView(file_path: str, on_close):
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.Container(
-                    content=video_control,
+                    content=(
+                        ft.Text(
+                            f"Playback error: {play_error}",
+                            color=ft.Colors.RED_300,
+                            text_align=ft.TextAlign.CENTER,
+                        )
+                        if play_error
+                        else video_control
+                    ),
+                    alignment=ft.Alignment(0, 0) if play_error else None,
                     expand=True,
                     bgcolor=ft.Colors.BLACK,
                 ),

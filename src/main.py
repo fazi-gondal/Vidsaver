@@ -314,11 +314,14 @@ def HomeView(
 ):
     """Declarative home view component for downloading videos."""
     url, set_url = ft.use_state("")
+    url_ref = ft.use_ref(url)
+    url_ref.current = url
 
     async def try_paste_clipboard():
         try:
             clip = await get_clipboard(page).get()
-            if clip and is_video_url(clip) and clip.strip() != url.strip():
+            current_url = url_ref.current or ""
+            if clip and is_video_url(clip) and clip.strip() != current_url.strip():
                 set_url(clip.strip())
         except Exception:
             pass
@@ -332,7 +335,7 @@ def HomeView(
         page.on_app_lifecycle_state_change = on_lifecycle
         return lambda: setattr(page, "on_app_lifecycle_state_change", old_handler)
 
-    ft.use_effect(setup_lifecycle, dependencies=[url])
+    ft.use_effect(setup_lifecycle, dependencies=[])
 
     async def on_url_focus(e):
         if not url:
@@ -441,16 +444,14 @@ def App(page: ft.Page):
         set_download_disabled(False)
         set_refresh_trigger(lambda prev: prev + 1)
         if is_done:
-            # Flet 1.0.0: show SnackBar via overlay.append + open=True + page.update()
-            snack = ft.SnackBar(
-                content=ft.Text("Video download complete"),
-                open=True,
-                duration=2500,
-                behavior=ft.SnackBarBehavior.FLOATING,
-                margin=ft.Margin(left=16, top=0, right=16, bottom=10),
+            page.show_dialog(
+                ft.SnackBar(
+                    content=ft.Text("Video download complete"),
+                    duration=2500,
+                    behavior=ft.SnackBarBehavior.FLOATING,
+                    margin=ft.Margin(left=16, top=0, right=16, bottom=10),
+                )
             )
-            page.overlay.append(snack)
-            page.update()
 
     def start_download(url: str):
         if not url:
