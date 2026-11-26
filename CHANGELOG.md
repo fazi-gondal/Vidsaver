@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-26
+
 ### Added
 - **Nocturnal Studio UI/UX Redesign** (`src/theme.py`, `src/assets/fonts/`):
   - Bundled `Space Grotesk` and `Inter` (`Regular`, `Medium`, `SemiBold`) fonts.
@@ -19,11 +21,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Repository Documentation**:
   - Added `CHANGELOG.md`, `CONTRIBUTING.md`, `LICENSE`, and GitHub issue templates.
 
+### Changed
+- **Instant Launch & Non-Blocking Pre-Warming** (`src/main.py`, `src/downloader.py`):
+  - Deferred `init_storage_paths()` and `ensure_media_scanner()` until after `page.render()` so the first UI screen paints immediately.
+  - Pre-imported `yt_dlp` and `requests` on a background daemon thread after first paint without blocking the UI thread.
+- **Fast Cookieless Downloads** (`src/downloader.py`):
+  - Switched to a cookie-free `yt-dlp` path by default (matching `ref/golang`), avoiding cookie parsing overhead and stale-cookie blocks.
+  - Added `js_runtimes={}`, `extractor_args` (`youtube:player_client=default,web_embedded,-android_vr`), `cachedir=False`, and tuned socket/retry timeouts.
+  - Restricted `resolve_short_url()` to actual shortener domains (`vm.tiktok.com`, `vt.tiktok.com`, `fb.watch`, `t.co/`, `instagr.am`, `pin.it`, `redd.it`, `t.snapchat.com`, `dai.ly`) so full URLs skip the extra `HEAD` round-trip.
+
 ### Fixed
 - Removed deprecated `InputBorder.NONE` in favor of `NoInputBorder()` for Flet 1.1.2 compatibility.
 - Removed unsupported `action_color` keyword argument from `ft.SnackBar`.
 - Switched `SnackBar` presentation to `page.show_dialog()` and added `Video.on_error` playback fallback in `src/player.py`.
-- Made `src/cookies.txt` optional so downloads without a cookie file do not fail.
+- Removed thread-unsafe `page.update()` call inside `run_download()`.
 
 ## [1.5.0]
 

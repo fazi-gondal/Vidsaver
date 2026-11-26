@@ -128,7 +128,7 @@ uv run flet build windows --source-packages packages/flet-media-scanner --yes --
 Build the Windows installer locally (requires [Inno Setup](https://jrsoftware.org/isinfo.php)):
 
 ```bash
-ISCC.exe /DAppExe=vidsaver.exe /DAppVersion=1.5.0 /DAppArch=x64 packages\windows\installer.iss
+ISCC.exe /DAppExe=vidsaver.exe /DAppVersion=1.6.0 /DAppArch=x64 packages\windows\installer.iss
 ```
 
 ## GitHub Release Workflow
@@ -142,15 +142,15 @@ The main release workflow is:
 It runs when a version tag is pushed:
 
 ```bash
-git tag v1.5.0
-git push origin v1.5.0
+git tag v1.6.0
+git push origin v1.6.0
 ```
 
 To delete a tag locally and remotely (if you need to recreate/re-tag):
 
 ```bash
-git tag -d v1.5.0
-git push origin :refs/tags/v1.5.0
+git tag -d v1.6.0
+git push origin :refs/tags/v1.6.0
 ```
 
 Normal pushes to `main` do not trigger the release build.
@@ -195,17 +195,14 @@ If you do not have Java or Android Studio locally, run `.github/workflows/genera
 
 When a link is submitted:
 
-1. The app displays a tonal status card with an active progress bar immediately.
-2. `yt-dlp` resolves short URLs and downloads in a background thread so the UI stays responsive.
-3. Download progress updates the progress bar and gradient fill in real time.
-4. On Android, the finished file is published to MediaStore under `Movies/Vidsaver`.
-5. A floating `SnackBar` confirms completion with a **View** shortcut to Downloads.
+1. The app displays a tonal status card with an active progress bar immediately (first-screen startup is non-blocking, with `yt-dlp` and `requests` pre-warmed in a background thread after first paint).
+2. `yt-dlp` runs **cookie-free** by default with `js_runtimes={}` and `web_embedded` YouTube client fallback in a background thread so the UI stays responsive.
+3. Short share URLs (`vm.tiktok.com`, `vt.tiktok.com`, `fb.watch`, `t.co/`, `t.snapchat.com`, etc.) are resolved automatically while full URLs skip redundant redirects.
+4. Download progress updates the progress bar and gradient fill in real time.
+5. On Android, the finished file is published to MediaStore under `Movies/Vidsaver`.
+6. A floating `SnackBar` confirms completion with a **View** shortcut to Downloads.
 
 Files are saved with the video's title as the filename — no platform IDs appended.
-
-## Cookies
-
-`src/cookies.txt` (optional) is passed to `yt-dlp` when present for sites that require session cookies. Keep it updated if a platform starts blocking downloads or requires login data.
 
 ## Troubleshooting
 
