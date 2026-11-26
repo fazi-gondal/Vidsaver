@@ -1,10 +1,12 @@
 """
-player.py — Declarative video player view.
+player.py — Declarative video player view (Nocturnal Studio design).
 """
 
 import os
 import flet as ft
 import flet_video as ftv
+
+import theme
 
 
 @ft.component
@@ -19,8 +21,6 @@ def PlayerView(file_path: str, on_close):
     file_name = os.path.basename(file_path)
     play_error, set_play_error = ft.use_state("")
 
-    # Memoize the Video control — prevents recreation (and playback reset)
-    # on every re-render triggered by parent state changes.
     video_control = ft.use_memo(
         lambda: ftv.Video(
             expand=True,
@@ -34,42 +34,60 @@ def PlayerView(file_path: str, on_close):
     return ft.Container(
         content=ft.Column(
             controls=[
-                ft.Row(
-                    controls=[
-                        ft.Text(
-                            value=file_name,
-                            weight=ft.FontWeight.BOLD,
-                            size=16,
-                            expand=True,
-                            max_lines=1,
-                            overflow=ft.TextOverflow.ELLIPSIS,
-                        ),
-                        ft.IconButton(
-                            icon=ft.Icons.CLOSE,
-                            icon_color=ft.Colors.RED_ACCENT_400,
-                            on_click=on_close,
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.IconButton(
+                                icon=ft.Icons.ARROW_BACK_ROUNDED,
+                                icon_color=ft.Colors.WHITE,
+                                tooltip="Back",
+                                on_click=on_close,
+                            ),
+                            ft.Text(
+                                value=file_name,
+                                style=ft.TextStyle(
+                                    font_family=theme.FONT_BODY_SEMIBOLD,
+                                    size=15,
+                                    weight=ft.FontWeight.W_600,
+                                    color=ft.Colors.WHITE,
+                                ),
+                                expand=True,
+                                max_lines=1,
+                                overflow=ft.TextOverflow.ELLIPSIS,
+                            ),
+                        ],
+                        spacing=4,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    padding=ft.Padding(left=4, right=12, top=6, bottom=6),
                 ),
                 ft.Container(
                     content=(
-                        ft.Text(
-                            f"Playback error: {play_error}",
-                            color=ft.Colors.RED_300,
-                            text_align=ft.TextAlign.CENTER,
+                        ft.Column(
+                            controls=[
+                                ft.Icon(ft.Icons.ERROR_OUTLINE_ROUNDED, size=40, color=theme.PILL_RED),
+                                ft.Text(
+                                    f"Playback error: {play_error}",
+                                    style=theme.body_md(theme.PILL_RED),
+                                    text_align=ft.TextAlign.CENTER,
+                                ),
+                                ft.OutlinedButton("Go Back", on_click=on_close),
+                            ],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=12,
                         )
                         if play_error
                         else video_control
                     ),
-                    alignment=ft.Alignment(0, 0) if play_error else None,
+                    alignment=ft.Alignment.CENTER if play_error else None,
                     expand=True,
                     bgcolor=ft.Colors.BLACK,
                 ),
             ],
+            spacing=0,
             expand=True,
         ),
-        padding=ft.Padding(left=10, right=10, top=8, bottom=30),
+        bgcolor=ft.Colors.BLACK,
         expand=True,
     )

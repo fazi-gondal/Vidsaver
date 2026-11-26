@@ -10,6 +10,7 @@ import time
 from urllib.parse import urlparse
 
 import flet as ft
+import theme
 
 VIDEO_EXTENSIONS = (".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".3gp")
 
@@ -310,19 +311,27 @@ def HomeView(
     progress_visible: bool,
     download_disabled: bool,
     on_download_click,
+    on_open_downloads,
     page: ft.Page,
 ):
     """Declarative home view component for downloading videos."""
+    from downloader import detect_platform
+
     url, set_url = ft.use_state("")
     url_ref = ft.use_ref(url)
     url_ref.current = url
 
-    async def try_paste_clipboard():
+    async def try_paste_clipboard(force: bool = False):
         try:
             clip = await get_clipboard(page).get()
-            current_url = url_ref.current or ""
-            if clip and is_video_url(clip) and clip.strip() != current_url.strip():
-                set_url(clip.strip())
+            if not clip:
+                return
+            cleaned = clip.strip()
+            current_url = (url_ref.current or "").strip()
+            if force and is_http_url(cleaned):
+                set_url(cleaned)
+            elif is_video_url(cleaned) and cleaned != current_url:
+                set_url(cleaned)
         except Exception:
             pass
 
@@ -342,54 +351,264 @@ def HomeView(
             await try_paste_clipboard()
 
     def handle_submit(e):
-        if url.strip():
+        if url.strip() and not download_disabled:
             on_download_click(url.strip())
 
-    return ft.Container(
-        content=ft.Column(
+    has_url = bool(url.strip())
+    valid_url = is_http_url(url)
+    detected_platform = detect_platform(url) if valid_url else ""
+    is_error = status_text_val.startswith("Error:")
+    is_saved = status_text_val.startswith("Video saved")
+
+    platform_color = theme.PLATFORM_PILL_COLORS.get(detected_platform, theme.PILL_CORAL)
+    platform_badge = (
+        ft.Row(
             controls=[
+                theme.status_pill(detected_platform, platform_color),
+                ft.Text(
+                    "Ready to download",
+                    style=theme.body_sm(ft.Colors.ON_SURFACE_VARIANT),
+                ),
+            ],
+            spacing=10,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+        if valid_url
+        else None
+    )
+
+    status_card = None
+    if progress_visible or status_text_val:
+        if is_error:
+            pill_label, pill_color = "Error", theme.PILL_RED
+            status_icon = ft.Icon(ft.Icons.ERROR_OUTLINE_ROUNDED, size=18, color=theme.PILL_RED)
+            card_gradient = None
+            card_border = ft.Colors.with_opacity(0.4, theme.PILL_RED)
+        elif is_saved:
+            pill_label, pill_color = "Saved", theme.PILL_GREEN
+            status_icon = ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE_ROUNDED, size=18, color=theme.PILL_GREEN)
+            card_gradient = None
+            card_border = None
+        else:
+            pill_label = "Downloading" if progress_val is not None else "Preparing"
+            pill_color = theme.PILL_CORAL
+            status_icon = ft.Icon(ft.Icons.DOWNLOADING_ROUNDED, size=18, color=theme.PILL_CORAL)
+            card_border = None
+            if progress_val is not None and progress_val > 0:
+                p = min(max(float(progress_val), 0.0), 1.0)
+                fill = ft.Colors.with_opacity(0.08, theme.PILL_CORAL)
+                card_gradient = ft.LinearGradient(
+                    begin=ft.Alignment.CENTER_LEFT,
+                    end=ft.Alignment.CENTER_RIGHT,
+                    colors=[fill, fill, ft.Colors.TRANSPARENT, ft.Colors.TRANSPARENT],
+                    stops=[0, p, p, 1],
+                )
+            else:
+                card_gradient = None
+
+        status_controls: list[ft.Control] = [
+            ft.Row(
+                controls=[
+                    status_icon,
+                    ft.Text(
+                        value=status_text_val or "Working...",
+                        style=ft.TextStyle(
+                            font_family=theme.FONT_BODY_SEMIBOLD,
+                            size=14,
+                            weight=ft.FontWeight.W_600,
+                            color=theme.PILL_RED if is_error else ft.Colors.ON_SURFACE,
+                        ),
+                        max_lines=2,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                        expand=True,
+                    ),
+                    theme.status_pill(pill_label, pill_color),
+                ],
+                spacing=10,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+        ]
+        if progress_visible:
+            status_controls.append(
+                ft.ProgressBar(
+                    height=8,
+                    value=progress_val,
+                    color=pill_color,
+                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                    border_radius=ft.BorderRadius.all(theme.RADIUS_PILL),
+                )
+            )
+            if progress_val is not None:
+                status_controls.append(
+                    ft.Text(
+                        f"{float(progress_val) * 100:.0f} %",
+                        style=theme.data_style(ft.Colors.ON_SURFACE_VARIANT),
+                    )
+                )
+        if is_saved:
+            status_controls.append(
+                ft.Row(
+                    controls=[
+                        ft.TextButton(
+                            "Open Downloads",
+                            icon=ft.Icons.VIDEO_LIBRARY_ROUNDED,
+                            on_click=lambda _: on_open_downloads(),
+                        )
+                    ],
+                    alignment=ft.MainAxisAlignment.END,
+                )
+            )
+        status_card = theme.surface_card(
+            content=ft.Column(controls=status_controls, spacing=10),
+            padding=16,
+            border_color=card_border,
+            gradient=card_gradient,
+        )
+
+    suffix_btn = (
+        ft.IconButton(
+            icon=ft.Icons.CLOSE_ROUNDED,
+            icon_size=20,
+            icon_color=ft.Colors.ON_SURFACE_VARIANT,
+            tooltip="Clear link",
+            on_click=lambda _: set_url(""),
+        )
+        if has_url
+        else ft.IconButton(
+            icon=ft.Icons.CONTENT_PASTE_ROUNDED,
+            icon_size=20,
+            icon_color=ft.Colors.ON_SURFACE_VARIANT,
+            tooltip="Paste from clipboard",
+            on_click=lambda _: asyncio.create_task(try_paste_clipboard(force=True)),
+        )
+    )
+
+    url_input = theme.inset_input_box(
+        content=ft.Row(
+            controls=[
+                ft.Icon(ft.Icons.LINK_ROUNDED, size=20, color=ft.Colors.ON_SURFACE_VARIANT),
                 ft.TextField(
                     value=url,
                     on_change=lambda e: set_url(e.control.value),
                     on_focus=lambda e: asyncio.create_task(on_url_focus(e)),
                     on_submit=handle_submit,
-                    label="Paste video link",
-                    border=ft.OutlineInputBorder(
-                        border_radius=ft.BorderRadius(12, 12, 12, 12)
-                    ),
-                    filled=True,
-                    prefix_icon=ft.Icons.LINK,
+                    hint_text="Paste video URL (https://...)",
+                    hint_style=theme.body_md(ft.Colors.ON_SURFACE_VARIANT),
+                    text_style=theme.body_lg(),
+                    border=ft.InputBorder.NONE,
+                    expand=True,
                 ),
-                ft.Button(
-                    "Download",
-                    icon=ft.Icons.DOWNLOAD_ROUNDED,
-                    height=40,
-                    style=ft.ButtonStyle(bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE),
-                    disabled=download_disabled,
-                    on_click=handle_submit,
-                ),
-                ft.ProgressBar(
-                    height=4,
-                    value=progress_val,
-                    visible=progress_visible,
-                    color=ft.Colors.BLUE,
-                    bgcolor=ft.Colors.BLUE_100,
-                    border_radius=4,
-                ),
-                ft.Text(value=status_text_val, color=ft.Colors.BLUE_GREY, size=12),
-                ft.Container(height=40),
-                ft.Text(
-                    "Vidsaver made with love by Fazi Gondal",
-                    size=16,
-                    color=ft.Colors.BLUE_GREY,
-                    text_align=ft.TextAlign.CENTER,
-                ),
+                suffix_btn,
             ],
-            spacing=12,
-            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-            scroll=ft.ScrollMode.ADAPTIVE,
+            spacing=8,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
-        padding=ft.Padding(left=24, right=24, top=24, bottom=24),
+        padding=ft.Padding(left=14, right=6, top=4, bottom=4),
+        radius=theme.RADIUS_CONTROL + 2,
+    )
+
+    services_row = ft.Column(
+        controls=[
+            ft.Text(
+                "SUPPORTED PLATFORMS",
+                style=theme.label_md(ft.Colors.ON_SURFACE_VARIANT),
+                text_align=ft.TextAlign.CENTER,
+            ),
+            ft.Row(
+                controls=[
+                    ft.Row(
+                        [
+                            ft.Icon(icon, size=16, color=ft.Colors.ON_SURFACE_VARIANT),
+                            ft.Text(name, style=theme.body_sm(ft.Colors.ON_SURFACE_VARIANT)),
+                        ],
+                        spacing=5,
+                        tight=True,
+                    )
+                    for name, icon in [
+                        ("YouTube", ft.Icons.SMART_DISPLAY_OUTLINED),
+                        ("TikTok", ft.Icons.MUSIC_NOTE_OUTLINED),
+                        ("Instagram", ft.Icons.PHOTO_CAMERA_OUTLINED),
+                        ("Facebook", ft.Icons.PUBLIC_OUTLINED),
+                        ("X / Twitter", ft.Icons.TAG_ROUNDED),
+                        ("Snapchat", ft.Icons.BOLT_OUTLINED),
+                    ]
+                ],
+                wrap=True,
+                spacing=18,
+                run_spacing=8,
+                alignment=ft.MainAxisAlignment.CENTER,
+            ),
+        ],
+        spacing=10,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        opacity=0.75,
+    )
+
+    main_column = ft.Column(
+        col={"xs": 12, "sm": 10, "md": 7, "lg": 5},
+        controls=[
+            ft.Column(
+                controls=[
+                    ft.Text(
+                        spans=[
+                            ft.TextSpan("Save any ", style=theme.headline_xl()),
+                            ft.TextSpan("video", style=theme.headline_xl(ft.Colors.PRIMARY)),
+                        ],
+                    ),
+                    ft.Text(
+                        "Drop a link below to save it straight to your device.",
+                        style=theme.body_md(ft.Colors.ON_SURFACE_VARIANT),
+                    ),
+                ],
+                spacing=6,
+            ),
+            theme.surface_card(
+                content=ft.Column(
+                    controls=[
+                        url_input,
+                        *([platform_badge] if platform_badge else []),
+                        ft.FilledButton(
+                            "Downloading..." if download_disabled else "Download Video",
+                            icon=ft.Icons.DOWNLOAD_ROUNDED,
+                            height=48,
+                            disabled=download_disabled,
+                            on_click=handle_submit,
+                        ),
+                    ],
+                    spacing=14,
+                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                ),
+                padding=18,
+            ),
+            *([status_card] if status_card else []),
+            ft.Container(content=services_row, padding=ft.Padding(top=12, bottom=4, left=0, right=0)),
+            ft.Container(
+                content=ft.Text(
+                    "VidSaver • Made by Fazi Gondal",
+                    style=theme.label_md(ft.Colors.ON_SURFACE_VARIANT),
+                    text_align=ft.TextAlign.CENTER,
+                    opacity=0.65,
+                ),
+                padding=ft.Padding(top=4, bottom=8, left=0, right=0),
+                alignment=ft.Alignment(0, 0),
+            ),
+        ],
+        spacing=18,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+    )
+
+    return ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.ResponsiveRow(
+                    controls=[main_column],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                )
+            ],
+            scroll=ft.ScrollMode.ADAPTIVE,
+            expand=True,
+        ),
+        padding=ft.Padding(left=20, right=20, top=24, bottom=20),
         expand=True,
     )
 
@@ -417,13 +636,17 @@ def App(page: ft.Page):
             page.navigation_bar = None
         else:
             page.navigation_bar = ft.NavigationBar(
-                bgcolor=ft.Colors.WHITE_10,
                 selected_index=active_tab,
                 on_change=lambda e: set_active_tab(e.control.selected_index),
                 destinations=[
-                    ft.NavigationBarDestination(icon=ft.Icons.HOME_FILLED, label="Home"),
                     ft.NavigationBarDestination(
-                        icon=ft.Icons.FILE_DOWNLOAD_ROUNDED,
+                        icon=ft.Icons.HOME_OUTLINED,
+                        selected_icon=ft.Icons.HOME_ROUNDED,
+                        label="Home",
+                    ),
+                    ft.NavigationBarDestination(
+                        icon=ft.Icons.VIDEO_LIBRARY_OUTLINED,
+                        selected_icon=ft.Icons.VIDEO_LIBRARY_ROUNDED,
                         label="Downloads",
                     ),
                 ],
@@ -446,8 +669,22 @@ def App(page: ft.Page):
         if is_done:
             page.show_dialog(
                 ft.SnackBar(
-                    content=ft.Text("Video download complete"),
-                    duration=2500,
+                    content=ft.Row(
+                        [
+                            ft.Icon(ft.Icons.CHECK_CIRCLE, size=18, color=theme.PILL_GREEN),
+                            ft.Text(
+                                "Video saved to Gallery",
+                                style=theme.body_md(ft.Colors.ON_SURFACE),
+                                expand=True,
+                            ),
+                        ],
+                        spacing=10,
+                    ),
+                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
+                    action="View",
+                    action_color=theme.PILL_CORAL,
+                    on_action=lambda _: set_active_tab(1),
+                    duration=3500,
                     behavior=ft.SnackBarBehavior.FLOATING,
                     margin=ft.Margin(left=16, top=0, right=16, bottom=10),
                 )
@@ -473,10 +710,7 @@ def App(page: ft.Page):
 
             # Use default-arg capture to avoid late-binding lambda bugs
             def on_status(message, _set=set_status_text):
-                if message.startswith("Downloading:"):
-                    page.loop.call_soon_threadsafe(_set, "Downloading video...")
-                else:
-                    page.loop.call_soon_threadsafe(_set, message)
+                page.loop.call_soon_threadsafe(_set, message)
 
             def on_progress(value, _set=set_progress_val):
                 page.loop.call_soon_threadsafe(_set, value)
@@ -549,6 +783,7 @@ def App(page: ft.Page):
             progress_visible=progress_visible,
             download_disabled=download_disabled,
             on_download_click=start_download,
+            on_open_downloads=lambda: set_active_tab(1),
             page=page,
         )
     else:
@@ -564,6 +799,7 @@ def App(page: ft.Page):
             refresh_trigger=refresh_trigger,
             delete_from_storage=lambda info: delete_saved_video(page, info),
             sync_from_storage=lambda: sync_saved_videos(page, metadata),
+            on_go_home=lambda: set_active_tab(0),
         )
 
     return ft.SafeArea(content=content_view, expand=True)
@@ -573,26 +809,52 @@ async def main(page: ft.Page):
     await init_storage_paths(page)
     ensure_media_scanner(page)
 
-    page.title = "Vidsaver"
+    page.title = "VidSaver"
     page.padding = 0
     page.spacing = 0
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.theme = ft.Theme(
-        scrollbar_theme=ft.ScrollbarTheme(
-            thickness=6,
-            radius=4,
-            interactive=True,
+    page.fonts = {
+        theme.FONT_HEADLINE: "/fonts/SpaceGrotesk-SemiBold.ttf",
+        theme.FONT_HEADLINE_BOLD: "/fonts/SpaceGrotesk-Bold.ttf",
+        theme.FONT_BODY: "/fonts/Inter-Regular.ttf",
+        theme.FONT_BODY_MEDIUM: "/fonts/Inter-Medium.ttf",
+        theme.FONT_BODY_SEMIBOLD: "/fonts/Inter-SemiBold.ttf",
+    }
+    page.theme_mode = ft.ThemeMode.SYSTEM
+    page.theme = theme.light_theme()
+    page.dark_theme = theme.dark_theme()
+
+    def toggle_theme(_):
+        page.theme_mode = (
+            ft.ThemeMode.LIGHT
+            if page.theme_mode == ft.ThemeMode.DARK
+            else ft.ThemeMode.DARK
         )
-    )
+        page.update()
+
     page.navigation_bar = None
     page.appbar = ft.AppBar(
-        title=ft.Text("Vidsaver", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD),
-        center_title=True,
-        bgcolor=ft.Colors.BLUE_700,
+        title=ft.Row(
+            controls=[
+                ft.Text("Vid", style=theme.headline_md()),
+                ft.Text("Saver", style=theme.headline_md(ft.Colors.PRIMARY)),
+            ],
+            spacing=0,
+            tight=True,
+        ),
+        center_title=False,
+        bgcolor=ft.Colors.SURFACE,
+        elevation=0,
+        actions=[
+            ft.IconButton(
+                icon=ft.Icons.CONTRAST_ROUNDED,
+                icon_color=ft.Colors.ON_SURFACE_VARIANT,
+                tooltip="Toggle light/dark theme",
+                on_click=toggle_theme,
+            )
+        ],
     )
 
     page.render(App, page=page)
 
 
-ft.run(main)
+ft.run(main, assets_dir="assets")
