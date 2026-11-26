@@ -16,6 +16,7 @@ VIDEO_EXTENSIONS = (".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".3gp")
 @ft.component
 def VideoCard(file_name: str, meta: dict, on_play, on_delete):
     """Tonal card component representing one saved video."""
+    hovered, set_hovered = ft.use_state(False)
     info = meta.get(file_name, {})
     platform = info.get("platform", "Video")
     date_str = info.get("date", "")
@@ -89,7 +90,7 @@ def VideoCard(file_name: str, meta: dict, on_play, on_delete):
     )
 
     return ft.Container(
-        content=theme.surface_card(
+        content=ft.Container(
             content=ft.Row(
                 controls=[
                     thumb,
@@ -106,6 +107,18 @@ def VideoCard(file_name: str, meta: dict, on_play, on_delete):
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             padding=ft.Padding(left=14, right=8, top=12, bottom=12),
+            bgcolor=(
+                ft.Colors.SURFACE_CONTAINER_HIGH
+                if hovered
+                else ft.Colors.SURFACE_CONTAINER_LOW
+            ),
+            border=ft.Border.all(
+                1,
+                ft.Colors.OUTLINE if hovered else ft.Colors.OUTLINE_VARIANT,
+            ),
+            border_radius=ft.BorderRadius.all(theme.RADIUS_CARD),
+            animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
+            on_hover=lambda e: set_hovered(e.data is True or e.data == "true"),
             on_click=lambda e, fn=file_name: on_play(fn),
             ink=True,
         ),

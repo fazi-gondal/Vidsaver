@@ -614,6 +614,102 @@ def HomeView(
 
 
 @ft.component
+def NavBarItem(
+    label: str,
+    icon: ft.IconData,
+    selected_icon: ft.IconData,
+    active: bool,
+    on_click,
+):
+    """Bottom navigation item with Nocturnal Studio hover and active animations."""
+    hovered, set_hovered = ft.use_state(False)
+
+    if active:
+        bg = ft.Colors.SURFACE_CONTAINER_HIGH
+    elif hovered:
+        bg = ft.Colors.with_opacity(0.6, ft.Colors.SURFACE_CONTAINER_HIGH)
+    else:
+        bg = None
+
+    return ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Container(
+                    width=28 if active else 0,
+                    height=3,
+                    bgcolor=ft.Colors.PRIMARY if active else ft.Colors.TRANSPARENT,
+                    border_radius=ft.BorderRadius.all(theme.RADIUS_PILL),
+                    animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
+                ),
+                ft.Row(
+                    controls=[
+                        ft.Icon(
+                            selected_icon if active else icon,
+                            size=21,
+                            color=ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        ft.Text(
+                            label,
+                            style=ft.TextStyle(
+                                font_family=theme.FONT_BODY_SEMIBOLD if active else theme.FONT_BODY,
+                                size=13.5,
+                                weight=ft.FontWeight.W_600 if active else ft.FontWeight.W_400,
+                                color=ft.Colors.ON_SURFACE if active else ft.Colors.ON_SURFACE_VARIANT,
+                            ),
+                            no_wrap=True,
+                        ),
+                    ],
+                    spacing=8,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+            ],
+            spacing=5,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            tight=True,
+        ),
+        padding=ft.Padding.symmetric(vertical=8, horizontal=18),
+        border_radius=ft.BorderRadius.all(theme.RADIUS_CONTROL),
+        bgcolor=bg,
+        animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
+        on_hover=lambda e: set_hovered(e.data is True or e.data == "true"),
+        on_click=on_click,
+        expand=True,
+        alignment=ft.Alignment.CENTER,
+    )
+
+
+@ft.component
+def BottomNavBar(active_tab: int, on_select):
+    """Tonal bottom navigation bar matching Nocturnal Studio's sidebar items."""
+    return ft.Container(
+        content=ft.Row(
+            controls=[
+                NavBarItem(
+                    label="Home",
+                    icon=ft.Icons.HOME_FILLED,
+                    selected_icon=ft.Icons.HOME_FILLED,
+                    active=active_tab == 0,
+                    on_click=lambda _: on_select(0),
+                ),
+                NavBarItem(
+                    label="Downloads",
+                    icon=ft.Icons.DOWNLOAD_ROUNDED,
+                    selected_icon=ft.Icons.DOWNLOAD,
+                    active=active_tab == 1,
+                    on_click=lambda _: on_select(1),
+                ),
+            ],
+            spacing=8,
+            alignment=ft.MainAxisAlignment.CENTER,
+        ),
+        bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+        border=ft.Border(top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+        padding=ft.Padding(left=12, right=12, top=8, bottom=10),
+    )
+
+
+@ft.component
 def App(page: ft.Page):
     """Root declarative App component."""
     active_tab, set_active_tab = ft.use_state(0)
@@ -631,29 +727,10 @@ def App(page: ft.Page):
     def sync_page_ui():
         if page.appbar:
             page.appbar.visible = not playing_file
-
-        if playing_file:
-            page.navigation_bar = None
-        else:
-            page.navigation_bar = ft.NavigationBar(
-                selected_index=active_tab,
-                on_change=lambda e: set_active_tab(e.control.selected_index),
-                destinations=[
-                    ft.NavigationBarDestination(
-                        icon=ft.Icons.HOME_OUTLINED,
-                        selected_icon=ft.Icons.HOME_ROUNDED,
-                        label="Home",
-                    ),
-                    ft.NavigationBarDestination(
-                        icon=ft.Icons.VIDEO_LIBRARY_OUTLINED,
-                        selected_icon=ft.Icons.VIDEO_LIBRARY_ROUNDED,
-                        label="Downloads",
-                    ),
-                ],
-            )
+        page.navigation_bar = None
         page.update()
 
-    ft.use_effect(sync_page_ui, dependencies=[playing_file, active_tab])
+    ft.use_effect(sync_page_ui, dependencies=[playing_file])
 
     def set_download_busy(message: str):
         set_download_completed(False)
@@ -801,7 +878,20 @@ def App(page: ft.Page):
             on_go_home=lambda: set_active_tab(0),
         )
 
-    return ft.SafeArea(content=content_view, expand=True)
+    if playing_file:
+        return ft.SafeArea(content=content_view, expand=True)
+
+    return ft.SafeArea(
+        content=ft.Column(
+            controls=[
+                ft.Container(content=content_view, expand=True),
+                BottomNavBar(active_tab=active_tab, on_select=set_active_tab),
+            ],
+            spacing=0,
+            expand=True,
+        ),
+        expand=True,
+    )
 
 
 async def main(page: ft.Page):
