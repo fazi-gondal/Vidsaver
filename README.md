@@ -1,32 +1,33 @@
-
 # Vidsaver
 
-Vidsaver is a cross-platform video downloader built with **Python 3.14** and **Flet 1.1.2**. It uses `yt-dlp` for download handling and provides a clean mobile/desktop UI for pasting a link, downloading, viewing saved videos, and deleting downloads.
+Vidsaver is a cross-platform video downloader built with **Python 3.14** and **Flet 1.1.2**. Powered by `yt-dlp`, it provides a fast, responsive mobile and desktop UI with the **Nocturnal Studio** design system for pasting links, tracking live download progress, managing your video library, and playing saved videos.
 
-**Download TikTok and Instagram reels without watermark in Full HD.**
+**Download TikTok and Instagram Reels without watermark in Full HD, plus YouTube, Facebook, X/Twitter, Snapchat, Reddit, Pinterest, Threads, Vimeo, Dailymotion, Twitch, LinkedIn, and Bilibili.**
 
 ## Features
 
-- Download videos from all platforms supported by `yt-dlp` (TikTok, Instagram, YouTube, Twitter/X, Facebook, and more)
-- Android downloads are published through MediaStore to:
+- **Multi-Platform Downloads**: Supports TikTok, Instagram, YouTube, Facebook (`fb.watch`), X/Twitter (`t.co`), Snapchat, Reddit (`v.redd.it`), Pinterest (`pin.it`), Threads, Vimeo, Dailymotion, Twitch, LinkedIn, Bilibili, and other `yt-dlp` extractors.
+- **Nocturnal Studio UI & UX**:
+  - Custom `Space Grotesk` and `Inter` typography with tonal surface layering and `1px` subtle borders.
+  - System light/dark theme support with a moon/sun theme toggle in the top bar.
+  - Animated bottom navigation bar (`Home` & `Downloads`) with hover states and active indicator pill.
+  - Sunken borderless URL input with clipboard auto-paste on resume/focus, paste/clear actions, and automatic platform detection pill.
+  - Live progress card with left-to-right progress gradient fill, status pill (`PREPARING`, `DOWNLOADING`, `SAVED`, `ERROR`), and actionable completion `SnackBar`.
+- **Smart Format Selection**: Automatically detects `ffmpeg` (`bv*+ba` on desktop) and falls back to pre-muxed `b[ext=mp4]/b` on mobile so Instagram, Facebook, and social downloads work without `ffmpeg`.
+- **Android MediaStore Integration**: Publishes finished downloads through `flet-media-scanner` to `Movies/Vidsaver`, making videos appear in the Gallery without broad storage permissions.
+- **Downloads Library & Built-in Player**:
+  - Search by title or platform, filter by platform pills, view file size and date, and delete with confirmation.
+  - Built-in full-screen video player powered by `flet-video` with playback error fallback.
+- **Automated Releases**:
+  - Android APK release builds target `arm64-v8a`.
+  - GitHub Releases attach:
 
-  ```text
-  Movies/Vidsaver
-  ```
-
-- Android videos appear in the Gallery without broad storage access or a media scan
-- Downloads library with video metadata, file size, platform chip, playback, and delete confirmation
-- Built-in video player powered by `flet-video`
-- Clipboard auto-paste — opens the paste bar when a supported video link is in the clipboard
-- Android APK release builds target `arm64-v8a`
-- GitHub Releases attach:
-
-  ```text
-  Vidsaver-vX.Y.Z-Windows.zip              (portable — extract and run)
-  Vidsaver-vX.Y.Z-Windows-setup.exe        (Inno Setup installer — installs to C:\Program Files\Vidsaver)
-  Vidsaver-vX.Y.Z-Android-arm64-v8a.apk   (raw APK, direct sideload)
-  Vidsaver-vX.Y.Z-Android-arm64-v8a.zip   (compressed APK, extract then install)
-  ```
+    ```text
+    Vidsaver-vX.Y.Z-Windows.zip              (portable — extract and run)
+    Vidsaver-vX.Y.Z-Windows-setup.exe        (Inno Setup installer — installs to C:\Program Files\Vidsaver)
+    Vidsaver-vX.Y.Z-Android-arm64-v8a.apk   (raw APK, direct sideload)
+    Vidsaver-vX.Y.Z-Android-arm64-v8a.zip   (compressed APK, extract then install)
+    ```
 
 ### Mobile Demo
 
@@ -40,44 +41,59 @@ Vidsaver is a cross-platform video downloader built with **Python 3.14** and **F
 
 ## Tech Stack
 
-- Python 3.14
-- Flet 1.1.2
-- flet-video 1.1.2
-- [flet-media-scanner](https://pypi.org/project/flet-media-scanner/) 1.0.3 (custom PyPI extension)
-- yt-dlp
-- requests
-- uv
+- **Language**: Python 3.14+
+- **UI Framework**: Flet 1.1.2 (declarative `@ft.component` architecture)
+- **Video Player**: `flet-video` 1.1.2
+- **Android MediaStore**: [`flet-media-scanner`](https://pypi.org/project/flet-media-scanner/) 1.0.3 (local workspace + PyPI extension)
+- **Download Engine**: `yt-dlp`, `requests`, `certifi`
+- **Package Manager**: `uv`
 
 ## Project Structure
 
 ```text
 .
-|-- .github/workflows/
-|   |-- all-builds.yml                        (Windows + Android CI/CD)
-|   `-- generate-android-keystore.yml
+|-- .github/
+|   |-- ISSUE_TEMPLATE/
+|   |   |-- bug_report.md
+|   |   `-- feature_request.md
+|   `-- workflows/
+|       |-- all-builds.yml                        (Windows + Android CI/CD)
+|       `-- generate-android-keystore.yml
 |-- packages/
 |   |-- flet-media-scanner/                   (custom Flet extension — published to PyPI)
 |   `-- windows/
 |       `-- installer.iss                     (Inno Setup script for Windows EXE installer)
 |-- src/
 |   |-- assets/
+|   |   |-- fonts/                            (Inter & Space Grotesk TTF fonts)
 |   |   |-- icon.png
 |   |   `-- splash_android.png
-|   |-- cookies.txt
-|   |-- downloader.py
-|   |-- library.py
-|   |-- main.py
-|   `-- player.py
+|   |-- cookies.txt                           (optional yt-dlp cookies)
+|   |-- downloader.py                         (platform detection & yt-dlp runner)
+|   |-- library.py                            (Downloads library, search, platform filters)
+|   |-- main.py                               (app entry point, HomeView, BottomNavBar)
+|   |-- player.py                             (built-in flet-video player)
+|   `-- theme.py                              (Nocturnal Studio palettes, typography & helpers)
+|-- CHANGELOG.md
+|-- CONTRIBUTING.md
+|-- LICENSE
 |-- pyproject.toml
 `-- README.md
 ```
 
 ## Run Locally
 
-Install dependencies and run the app:
+Install dependencies and run the desktop app:
 
 ```bash
+uv sync
 uv run flet run
+```
+
+Run on Android device preview:
+
+```bash
+uv run flet run --android
 ```
 
 Run as a web app:
@@ -97,7 +113,7 @@ The normal Android 13+ download flow does not request storage or media permissio
 
 ## Build Locally
 
-Android arm64 APK:
+Android `arm64-v8a` APK:
 
 ```bash
 uv run flet build apk --split-per-abi --arch arm64-v8a --source-packages packages/flet-media-scanner --yes --verbose
@@ -123,7 +139,7 @@ The main release workflow is:
 .github/workflows/all-builds.yml
 ```
 
-It runs only when a version tag is pushed:
+It runs when a version tag is pushed:
 
 ```bash
 git tag v1.5.0
@@ -139,8 +155,6 @@ git push origin :refs/tags/v1.5.0
 
 Normal pushes to `main` do not trigger the release build.
 
-The workflow builds and publishes:
-
 | Target | Runner | Output |
 | --- | --- | --- |
 | Windows | `windows-latest` | Portable `.zip` + Inno Setup `.exe` installer |
@@ -148,25 +162,19 @@ The workflow builds and publishes:
 
 ### Windows Installer (CI)
 
-After `flet build windows`, the workflow runs `ISCC.exe` with the script at `packages/windows/installer.iss`:
+After `flet build windows`, the workflow runs `ISCC.exe` with `packages/windows/installer.iss`:
 
-- Detects the `.exe` flet produced automatically
+- Detects the `.exe` Flet produced automatically
 - Passes version from the Git tag via `/DAppVersion`
 - Output: `Vidsaver-windows-x64-setup.exe` in `build/`
 - Installs to `C:\Program Files\Vidsaver` (64-bit)
-- Creates Start Menu and optional Desktop shortcut
+- Creates Start Menu and optional Desktop shortcuts
 
-The release job refuses to publish an Android APK unless the filename contains:
-
-```text
-arm64-v8a
-```
-
-This prevents accidentally uploading a mislabeled `armeabi-v7a` APK.
+The release job refuses to publish an Android APK unless the filename contains `arm64-v8a`, preventing accidental upload of a mislabeled `armeabi-v7a` APK.
 
 ## Android Signing
 
-Stable Android signing is required if users should install new APK versions over old ones without uninstalling.
+Stable Android signing is required so users can install new APK versions over older ones without uninstalling.
 
 The release workflow expects these GitHub Actions secrets:
 
@@ -177,104 +185,42 @@ ANDROID_KEY_PASSWORD
 ANDROID_KEY_ALIAS
 ```
 
-The workflow decodes the keystore and signs the APK with:
-
-```bash
---android-signing-key-store upload-keystore.jks
---android-signing-key-store-password "$ANDROID_KEYSTORE_PASSWORD"
---android-signing-key-password "$ANDROID_KEY_PASSWORD"
---android-signing-key-alias "$ANDROID_KEY_ALIAS"
-```
-
 If these secrets are missing, Android release builds fail intentionally instead of publishing a debug-signed APK.
 
-## Generate Android Keystore In GitHub
+### Generate Android Keystore In GitHub
 
-If you do not have Java, Android Studio, or Android tooling locally, use the manual workflow:
-
-```text
-.github/workflows/generate-android-keystore.yml
-```
-
-Steps:
-
-1. Open GitHub Actions.
-2. Run `Generate Android Keystore Secret`.
-3. Keep the default alias as `vidsaver`, or enter another alias.
-4. Download the `android-keystore-github-secrets` artifact.
-5. Copy each value from `android-keystore-github-secrets.txt` into GitHub repository secrets:
-
-   ```text
-   ANDROID_KEYSTORE_BASE64
-   ANDROID_KEYSTORE_PASSWORD
-   ANDROID_KEY_PASSWORD
-   ANDROID_KEY_ALIAS
-   ```
-
-6. Delete the artifact after copying the values. The workflow sets artifact retention to 1 day.
-
-After this one-time setup, future release APKs are signed automatically with the same key.
-
-## Install And Update Notes
-
-- **Windows (Installer)**: Download `Vidsaver-vX.Y.Z-Windows-setup.exe` → double-click to install. Installs to `C:\Program Files\Vidsaver`, creates Start Menu shortcuts, and supports standard Windows uninstall.
-- **Windows (Portable)**: Download `Windows.zip` → extract anywhere and run `vidsaver.exe`. No installation needed.
-- **Android**: Download `Android-arm64-v8a.apk` for direct sideload, or `Android-arm64-v8a.zip` (extract then install the `.apk` inside).
-- If an older version was installed from a wrong ABI, split APK, or different signing key, Android may show an install/package mismatch error. Uninstall the old app once, then install the new signed APK.
-- After stable signing is configured, future APKs install over previous versions normally.
+If you do not have Java or Android Studio locally, run `.github/workflows/generate-android-keystore.yml` from GitHub Actions, download the `android-keystore-github-secrets` artifact, copy the four values into repository secrets, and delete the artifact.
 
 ## Download Behavior
 
 When a link is submitted:
 
-1. The app shows an active progress bar immediately.
-2. `yt-dlp` analyzes the URL in a background thread (UI stays responsive).
-3. Download progress updates the progress bar in real time.
+1. The app displays a tonal status card with an active progress bar immediately.
+2. `yt-dlp` resolves short URLs and downloads in a background thread so the UI stays responsive.
+3. Download progress updates the progress bar and gradient fill in real time.
 4. On Android, the finished file is published to MediaStore under `Movies/Vidsaver`.
-5. A snackbar confirms the download is complete.
+5. A floating `SnackBar` confirms completion with a **View** shortcut to Downloads.
 
 Files are saved with the video's title as the filename — no platform IDs appended.
 
 ## Cookies
 
-`src/cookies.txt` is used by `yt-dlp` for sites that require cookies. Keep it updated if a platform starts blocking downloads or requires login/session data.
+`src/cookies.txt` (optional) is passed to `yt-dlp` when present for sites that require session cookies. Keep it updated if a platform starts blocking downloads or requires login data.
 
 ## Troubleshooting
 
-### `ModuleNotFoundError: certifi`
+- **`ModuleNotFoundError: certifi`**: Ensure `certifi`, `charset-normalizer`, `idna`, and `urllib3` are listed in `pyproject.toml` under `[tool.flet.android].dependencies`.
+- **New version will not install over old version**: Caused by a different signing key or previous wrong ABI install. Uninstall the older build once and install the signed `arm64-v8a` APK.
+- **Video does not appear in Gallery**: Vidsaver saves via MediaStore to `Movies/Vidsaver`; some Gallery apps take a few seconds to refresh.
 
-Make sure the APK was built after `certifi`, `charset-normalizer`, `idna`, and `urllib3` were added to `pyproject.toml`.
+## Documentation & Links
 
-### APK Installs As 32-bit
-
-Use one of the Android release assets:
-
-```text
-Vidsaver-vX.Y.Z-Android-arm64-v8a.apk   ← direct sideload
-Vidsaver-vX.Y.Z-Android-arm64-v8a.zip   ← extract then install the .apk inside
-```
-
-The workflow fails if it cannot find an actual `arm64-v8a` APK.
-
-### New Version Will Not Install Over Old Version
-
-Usually caused by a different signing key or a previous wrong ABI/split install. Configure stable signing secrets and uninstall the older build once if necessary.
-
-### Video Does Not Appear In Gallery
-
-The app saves through MediaStore to `Movies/Vidsaver`. Some Gallery apps may take a short time to refresh their cache.
-
-### `DeprecationWarning` On Startup
-
-All Flet 1.1.2 deprecations have been resolved. If you see any, check that you are running the latest `main` and that `flet==1.1.2` is installed.
-
-## Useful Links
-
-- [Flet documentation](https://flet.dev/docs/)
-- [Flet Android packaging](https://flet.dev/docs/publish/android/)
+- [Changelog](CHANGELOG.md)
+- [Contributing Guide](CONTRIBUTING.md)
+- [License (MIT)](LICENSE)
+- [Flet Documentation](https://flet.dev/docs/)
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 - [flet-media-scanner on PyPI](https://pypi.org/project/flet-media-scanner/)
-- [Inno Setup](https://jrsoftware.org/isinfo.php)
 
 <p align="center">
   Crafted with care by <strong>Fazi Gondal</strong>
