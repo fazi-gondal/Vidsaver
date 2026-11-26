@@ -6,6 +6,7 @@ import asyncio
 from datetime import datetime
 import os
 import tempfile
+import threading
 import time
 from urllib.parse import urlparse
 
@@ -778,8 +779,8 @@ def App(page: ft.Page):
         async def download_flow():
             set_download_busy("Fetching video...")
 
-            directory, metadata = ensure_storage_paths(page)
-            cookie_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
+            directory, metadata = await init_storage_paths(page)
+            cookie_path = ""
             from downloader import run_download
 
             had_error = [False]
@@ -895,9 +896,6 @@ def App(page: ft.Page):
 
 
 async def main(page: ft.Page):
-    await init_storage_paths(page)
-    ensure_media_scanner(page)
-
     page.title = "VidSaver"
     page.padding = 0
     page.spacing = 0
@@ -952,6 +950,16 @@ async def main(page: ft.Page):
     )
 
     page.render(App, page=page)
+
+    async def _post_launch_init() -> None:
+        await asyncio.sleep(0)
+        await init_storage_paths(page)
+        ensure_media_scanner(page)
+        from downloader import preload_heavy_modules
+
+        threading.Thread(target=preload_heavy_modules, daemon=True).start()
+
+    asyncio.create_task(_post_launch_init())
 
 
 ft.run(main, assets_dir="assets")

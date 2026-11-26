@@ -89,9 +89,9 @@ def save_metadata(metadata_path: str, meta: dict):
 
 
 SHORT_URL_HOSTS = (
-    "tiktok.com",
+    "vm.tiktok.com",
+    "vt.tiktok.com",
     "fb.watch",
-    "fb.com",
     "facebook.com/share/",
     "t.co/",
     "t.snapchat.com",
@@ -104,7 +104,7 @@ SHORT_URL_HOSTS = (
 
 
 def resolve_short_url(url: str) -> str:
-    """Follow redirects for short share links (TikTok, Facebook, Snapchat, X, etc.)."""
+    """Follow redirects for short share links (vm/vt.tiktok.com, fb.watch, t.snapchat.com, etc.)."""
     u = url.lower()
     if any(host in u for host in SHORT_URL_HOSTS):
         import requests
@@ -117,7 +117,7 @@ def resolve_short_url(url: str) -> str:
                     "Chrome/120.0.0.0 Safari/537.36"
                 )
             }
-            response = requests.head(url, headers=headers, allow_redirects=True, timeout=10)
+            response = requests.head(url, headers=headers, allow_redirects=True, timeout=5)
             if response.url and response.url.startswith(("http://", "https://")):
                 return response.url
         except Exception:
@@ -126,8 +126,12 @@ def resolve_short_url(url: str) -> str:
 
 
 def preload_heavy_modules():
-    """Kept for compatibility; downloads import network packages on demand."""
-    return
+    """Pre-import yt_dlp and requests on a background thread after first UI paint."""
+    try:
+        import requests  # noqa: F401
+        import yt_dlp  # noqa: F401
+    except Exception:
+        pass
 
 
 def mark_files_recent(paths: list[str]) -> None:
@@ -283,11 +287,18 @@ def run_download(
         "writeautomaticsub": False,
         "writethumbnail": False,
         "noplaylist": True,
+        "cachedir": False,
+        "js_runtimes": {},
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["default", "web_embedded", "-android_vr"],
+            }
+        },
         "sleep_interval": 0,
         "max_sleep_interval": 0,
-        "socket_timeout": 15,
-        "retries": 3,
-        "fragment_retries": 3,
+        "socket_timeout": 10,
+        "retries": 2,
+        "fragment_retries": 2,
         "concurrent_fragment_downloads": 4,
         "quiet": True,
         "no_warnings": True,
@@ -304,8 +315,7 @@ def run_download(
             "Accept-Language": "en-US,en;q=0.5",
         },
     }
-    if cookie_path and os.path.exists(cookie_path):
-        ydl_opts["cookiefile"] = cookie_path
+    del cookie_path  # Cookie-free path avoids stale cookie blocks and parsing overhead.
 
     before = {
         f: os.path.getmtime(os.path.join(target_dir, f))
@@ -316,7 +326,6 @@ def run_download(
     try:
         if "yt_dlp" not in sys.modules:
             on_status("Preparing downloader (first run only)...")
-            page.update()
 
         from yt_dlp import YoutubeDL
 
