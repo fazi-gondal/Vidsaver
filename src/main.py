@@ -711,10 +711,12 @@ def BottomNavBar(active_tab: int, on_select):
 
 
 @ft.component
-def App(page: ft.Page):
-    """Root declarative App component."""
+def App(page: ft.Page, appbar: ft.AppBar):
+    """Root declarative App component returning View stack for native Back navigation."""
     active_tab, set_active_tab = ft.use_state(0)
     playing_file, set_playing_file = ft.use_state(None)
+    playing_file_ref = ft.use_ref(playing_file)
+    playing_file_ref.current = playing_file
 
     status_text, set_status_text = ft.use_state("")
     progress_val, set_progress_val = ft.use_state(None)
@@ -725,13 +727,16 @@ def App(page: ft.Page):
     refresh_trigger, set_refresh_trigger = ft.use_state(0)
     scroll_offset, set_scroll_offset = ft.use_state(0)
 
-    def sync_page_ui():
-        if page.appbar:
-            page.appbar.visible = not playing_file
-        page.navigation_bar = None
-        page.update()
+    def setup_view_pop():
+        def handle_view_pop(e):
+            if playing_file_ref.current:
+                set_playing_file(None)
 
-    ft.use_effect(sync_page_ui, dependencies=[playing_file])
+        old_handler = page.on_view_pop
+        page.on_view_pop = handle_view_pop
+        return lambda: setattr(page, "on_view_pop", old_handler)
+
+    ft.use_effect(setup_view_pop, dependencies=[])
 
     def set_download_busy(message: str):
         set_download_completed(False)
@@ -837,24 +842,8 @@ def App(page: ft.Page):
 
         asyncio.create_task(download_flow())
 
-    if playing_file:
-        from downloader import load_metadata
-        from player import PlayerView
-
-        _, metadata = ensure_storage_paths(page)
-        info = load_metadata(metadata).get(playing_file, {})
-        playable_path = (
-            info.get("content_uri")
-            or info.get("source_path")
-            or info.get("file_path")
-            or playing_file
-        )
-        content_view = PlayerView(
-            file_path=playable_path,
-            on_close=lambda e: set_playing_file(None),
-        )
-    elif active_tab == 0:
-        content_view = HomeView(
+    if active_tab == 0:
+        main_content = HomeView(
             status_text_val=status_text,
             progress_val=progress_val,
             progress_visible=progress_visible,
@@ -867,7 +856,7 @@ def App(page: ft.Page):
         from library import LibraryView
 
         directory, metadata = ensure_storage_paths(page)
-        content_view = LibraryView(
+        main_content = LibraryView(
             download_dir=directory,
             metadata_path=metadata,
             on_play=set_playing_file,
@@ -879,20 +868,54 @@ def App(page: ft.Page):
             on_go_home=lambda: set_active_tab(0),
         )
 
-    if playing_file:
-        return ft.SafeArea(content=content_view, expand=True)
-
-    return ft.SafeArea(
-        content=ft.Column(
-            controls=[
-                ft.Container(content=content_view, expand=True),
-                BottomNavBar(active_tab=active_tab, on_select=set_active_tab),
-            ],
+    views: list[ft.View] = [
+        ft.View(
+            route="/",
+            appbar=appbar,
+            bottom_appbar=ft.BottomAppBar(
+                content=BottomNavBar(active_tab=active_tab, on_select=set_active_tab),
+                bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+                padding=0,
+                elevation=0,
+                height=68,
+            ),
+            controls=[ft.SafeArea(content=main_content, expand=True)],
+            padding=0,
             spacing=0,
-            expand=True,
-        ),
-        expand=True,
-    )
+        )
+    ]
+
+    if playing_file:
+        from downloader import load_metadata
+        from player import PlayerView
+
+        _, metadata = ensure_storage_paths(page)
+        info = load_metadata(metadata).get(playing_file, {})
+        playable_path = (
+            info.get("content_uri")
+            or info.get("source_path")
+            or info.get("file_path")
+            or playing_file
+        )
+        views.append(
+            ft.View(
+                route="/player",
+                controls=[
+                    ft.SafeArea(
+                        content=PlayerView(
+                            file_path=playable_path,
+                            on_close=lambda e: set_playing_file(None),
+                        ),
+                        expand=True,
+                    )
+                ],
+                padding=0,
+                spacing=0,
+                bgcolor=ft.Colors.BLACK,
+            )
+        )
+
+    return views
 
 
 async def main(page: ft.Page):
@@ -933,8 +956,7 @@ async def main(page: ft.Page):
 
     theme_btn.on_click = toggle_theme
 
-    page.navigation_bar = None
-    page.appbar = ft.AppBar(
+    appbar = ft.AppBar(
         title=ft.Row(
             controls=[
                 ft.Text("Vid", style=theme.headline_md()),
@@ -949,7 +971,7 @@ async def main(page: ft.Page):
         actions=[theme_btn],
     )
 
-    page.render(App, page=page)
+    page.render_views(App, page=page, appbar=appbar)
 
     async def _post_launch_init() -> None:
         await asyncio.sleep(0)
