@@ -495,7 +495,7 @@ def HomeView(
                     hint_text="Paste video URL (https://...)",
                     hint_style=theme.body_md(ft.Colors.ON_SURFACE_VARIANT),
                     text_style=theme.body_lg(),
-                    border=ft.InputBorder.NONE,
+                    border=ft.NoInputBorder(),
                     expand=True,
                 ),
                 suffix_btn,

@@ -281,7 +281,7 @@ def LibraryView(
                         hint_text="Search by title or platform...",
                         hint_style=theme.body_md(ft.Colors.ON_SURFACE_VARIANT),
                         text_style=theme.body_md(),
-                        border=ft.InputBorder.NONE,
+                        border=ft.NoInputBorder(),
                         dense=True,
                         expand=True,
                     ),
