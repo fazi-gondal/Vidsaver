@@ -912,13 +912,28 @@ async def main(page: ft.Page):
     page.theme = theme.light_theme()
     page.dark_theme = theme.dark_theme()
 
+    def is_dark_mode() -> bool:
+        if page.theme_mode == ft.ThemeMode.DARK:
+            return True
+        if page.theme_mode == ft.ThemeMode.LIGHT:
+            return False
+        return page.platform_brightness != ft.Brightness.LIGHT
+
+    theme_btn = ft.IconButton(
+        icon=ft.Icons.DARK_MODE_OUTLINED if is_dark_mode() else ft.Icons.LIGHT_MODE_OUTLINED,
+        icon_color=ft.Colors.ON_SURFACE_VARIANT,
+        tooltip="Toggle light/dark theme",
+    )
+
     def toggle_theme(_):
-        page.theme_mode = (
-            ft.ThemeMode.LIGHT
-            if page.theme_mode == ft.ThemeMode.DARK
-            else ft.ThemeMode.DARK
+        new_dark = not is_dark_mode()
+        page.theme_mode = ft.ThemeMode.DARK if new_dark else ft.ThemeMode.LIGHT
+        theme_btn.icon = (
+            ft.Icons.DARK_MODE_OUTLINED if new_dark else ft.Icons.LIGHT_MODE_OUTLINED
         )
         page.update()
+
+    theme_btn.on_click = toggle_theme
 
     page.navigation_bar = None
     page.appbar = ft.AppBar(
@@ -933,14 +948,7 @@ async def main(page: ft.Page):
         center_title=False,
         bgcolor=ft.Colors.SURFACE,
         elevation=0,
-        actions=[
-            ft.IconButton(
-                icon=ft.Icons.CONTRAST_ROUNDED,
-                icon_color=ft.Colors.ON_SURFACE_VARIANT,
-                tooltip="Toggle light/dark theme",
-                on_click=toggle_theme,
-            )
-        ],
+        actions=[theme_btn],
     )
 
     page.render(App, page=page)
