@@ -682,7 +682,6 @@ def App(page: ft.Page):
                     ),
                     bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
                     action="View",
-                    action_color=theme.PILL_CORAL,
                     on_action=lambda _: set_active_tab(1),
                     duration=3500,
                     behavior=ft.SnackBarBehavior.FLOATING,
