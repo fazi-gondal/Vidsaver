@@ -329,6 +329,8 @@ def App(page: ft.Page):
                 height=68,
             ),
             controls=[ft.SafeArea(content=main_content, expand=True)],
+            can_pop=(active_tab == 0),
+            on_confirm_pop=lambda _: set_active_tab(0),
             padding=0,
             spacing=0,
         )

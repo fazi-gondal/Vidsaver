@@ -92,7 +92,7 @@ def VideoCard(file_name: str, meta: dict, on_play, on_delete):
                     ft.IconButton(
                         icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
                         icon_size=20,
-                        icon_color=ft.Colors.ON_SURFACE_VARIANT,
+                        icon_color=theme.PILL_RED,
                         tooltip="Delete",
                         on_click=lambda e, fn=file_name: on_delete(fn),
                     ),
