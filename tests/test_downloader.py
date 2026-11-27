@@ -96,7 +96,7 @@ def test_run_download_cookieless_and_format_selection(monkeypatch, tmp_path):
             return {"filepath": str(out_file)}
 
     fake_yt_dlp = types.ModuleType("yt_dlp")
-    fake_yt_dlp.YoutubeDL = FakeYDL
+    setattr(fake_yt_dlp, "YoutubeDL", FakeYDL)
     monkeypatch.setitem(sys.modules, "yt_dlp", fake_yt_dlp)
     monkeypatch.setattr(downloader.shutil, "which", lambda name: None)
 

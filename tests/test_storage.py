@@ -2,10 +2,15 @@
 
 import asyncio
 from types import SimpleNamespace
+from typing import cast
 
 import flet as ft
 
 import storage
+
+
+def _fake_page(platform) -> ft.Page:
+    return cast(ft.Page, SimpleNamespace(platform=platform))
 
 
 def test_url_validation():
@@ -21,16 +26,16 @@ def test_url_validation():
 
 
 def test_is_android_page():
-    assert storage.is_android_page(SimpleNamespace(platform=ft.PagePlatform.ANDROID))
-    assert storage.is_android_page(SimpleNamespace(platform="android"))
-    assert not storage.is_android_page(SimpleNamespace(platform=ft.PagePlatform.WINDOWS))
+    assert storage.is_android_page(_fake_page(ft.PagePlatform.ANDROID))
+    assert storage.is_android_page(_fake_page("android"))
+    assert not storage.is_android_page(_fake_page(ft.PagePlatform.WINDOWS))
 
 
 def test_publish_and_delete_desktop(tmp_path):
     video = tmp_path / "clip.mp4"
     video.write_bytes(b"video-bytes")
     meta_path = tmp_path / "metadata.json"
-    page = SimpleNamespace(platform=ft.PagePlatform.WINDOWS)
+    page = _fake_page(ft.PagePlatform.WINDOWS)
 
     ok, err = asyncio.run(
         storage.publish_download_result(
