@@ -407,15 +407,15 @@ def HomeView(
             else:
                 card_gradient = None
 
-        status_controls: list[ft.Control] = [
-            ft.Row(
+        if is_error or is_saved:
+            header_row = ft.Row(
                 controls=[
                     status_icon,
                     ft.Text(
                         value=status_text_val or "Working...",
                         style=ft.TextStyle(
                             font_family=theme.FONT_BODY_SEMIBOLD,
-                            size=14,
+                            size=13.5,
                             weight=ft.FontWeight.W_600,
                             color=theme.PILL_RED if is_error else ft.Colors.ON_SURFACE,
                         ),
@@ -425,27 +425,56 @@ def HomeView(
                     ),
                     theme.status_pill(pill_label, pill_color),
                 ],
-                spacing=10,
+                spacing=8,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             )
-        ]
+        elif progress_val is not None:
+            header_row = ft.Row(
+                controls=[
+                    status_icon,
+                    theme.status_pill(pill_label, pill_color),
+                    ft.Container(expand=True),
+                    ft.Text(
+                        f"{float(progress_val) * 100:.0f} %",
+                        style=theme.data_style(ft.Colors.ON_SURFACE_VARIANT),
+                    ),
+                ],
+                spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+        else:
+            header_row = ft.Row(
+                controls=[
+                    status_icon,
+                    ft.Text(
+                        value=status_text_val or "Working...",
+                        style=ft.TextStyle(
+                            font_family=theme.FONT_BODY_SEMIBOLD,
+                            size=13.5,
+                            weight=ft.FontWeight.W_600,
+                            color=ft.Colors.ON_SURFACE,
+                        ),
+                        max_lines=1,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                        expand=True,
+                    ),
+                    theme.status_pill(pill_label, pill_color),
+                ],
+                spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+
+        status_controls: list[ft.Control] = [header_row]
         if progress_visible:
             status_controls.append(
                 ft.ProgressBar(
-                    height=8,
+                    height=6,
                     value=progress_val,
                     color=pill_color,
                     bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
                     border_radius=ft.BorderRadius.all(theme.RADIUS_PILL),
                 )
             )
-            if progress_val is not None:
-                status_controls.append(
-                    ft.Text(
-                        f"{float(progress_val) * 100:.0f} %",
-                        style=theme.data_style(ft.Colors.ON_SURFACE_VARIANT),
-                    )
-                )
         if is_saved:
             status_controls.append(
                 ft.Row(
@@ -460,8 +489,8 @@ def HomeView(
                 )
             )
         status_card = theme.surface_card(
-            content=ft.Column(controls=status_controls, spacing=10),
-            padding=16,
+            content=ft.Column(controls=status_controls, spacing=8),
+            padding=12,
             border_color=card_border,
             gradient=card_gradient,
         )
@@ -621,6 +650,7 @@ def NavBarItem(
     selected_icon: ft.IconData,
     active: bool,
     on_click,
+    icon_color: str | None = None,
 ):
     """Bottom navigation item with Nocturnal Studio hover and active animations."""
     hovered, set_hovered = ft.use_state(False)
@@ -647,7 +677,7 @@ def NavBarItem(
                         ft.Icon(
                             selected_icon if active else icon,
                             size=21,
-                            color=ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT,
+                            color=icon_color or (ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT),
                         ),
                         ft.Text(
                             label,
@@ -699,6 +729,7 @@ def BottomNavBar(active_tab: int, on_select):
                     selected_icon=ft.Icons.DOWNLOAD,
                     active=active_tab == 1,
                     on_click=lambda _: on_select(1),
+                    icon_color=theme.PILL_RED,
                 ),
             ],
             spacing=8,

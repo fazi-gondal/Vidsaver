@@ -43,12 +43,7 @@ def VideoCard(file_name: str, meta: dict, on_play, on_delete):
             size = os.path.getsize(source_path)
         except Exception:
             size = 0
-    meta_parts = []
-    if size:
-        meta_parts.append(f"{size / (1024 * 1024):.1f} MB")
-    if date_str:
-        meta_parts.append(date_str)
-    meta_text = "  ·  ".join(meta_parts)
+    meta_text = f"{size / (1024 * 1024):.1f} MB" if size else ""
 
     name_without_ext = os.path.splitext(file_name)[0]
 
