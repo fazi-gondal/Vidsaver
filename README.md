@@ -9,15 +9,19 @@ Vidsaver is a cross-platform video downloader built with **Python 3.14** and **F
 - **Multi-Platform Downloads**: Supports TikTok, Instagram, YouTube, Facebook (`fb.watch`), X/Twitter (`t.co`), Snapchat, Reddit (`v.redd.it`), Pinterest (`pin.it`), Threads, Vimeo, Dailymotion, Twitch, LinkedIn, Bilibili, and other `yt-dlp` extractors.
 - **Nocturnal Studio UI & UX**:
   - Custom `Space Grotesk` and `Inter` typography with tonal surface layering and `1px` subtle borders.
-  - System light/dark theme support with a moon/sun theme toggle in the top bar.
-  - Animated bottom navigation bar (`Home` & `Downloads`) with hover states and active indicator pill.
+  - System light/dark theme support with a declarative moon/sun theme toggle in the top `AppBar`.
+  - `BottomAppBar` navigation (`Home` & `Downloads`) with hover states and active indicator pill that stays beneath the soft keyboard while typing.
+  - Native `View` stack navigation (`page.render_views` + `on_view_pop`) so the Android Back button closes the video player instead of exiting the app.
   - Sunken borderless URL input with clipboard auto-paste on resume/focus, paste/clear actions, and automatic platform detection pill.
-  - Live progress card with left-to-right progress gradient fill, status pill (`PREPARING`, `DOWNLOADING`, `SAVED`, `ERROR`), and actionable completion `SnackBar`.
+  - Compact live progress card with left-to-right progress gradient fill, status pill (`PREPARING`, `DOWNLOADING`, `SAVED`, `ERROR`), and floating completion `SnackBar`.
 - **Smart Format Selection**: Automatically detects `ffmpeg` (`bv*+ba` on desktop) and falls back to pre-muxed `b[ext=mp4]/b` on mobile so Instagram, Facebook, and social downloads work without `ffmpeg`.
 - **Android MediaStore Integration**: Publishes finished downloads through `flet-media-scanner` to `Movies/Vidsaver`, making videos appear in the Gallery without broad storage permissions.
-- **Downloads Library & Built-in Player**:
-  - Search by title or platform, filter by platform pills, view file size and date, and delete with confirmation.
+- **Instant Downloads Library & Built-in Player**:
+  - Cached library view stays mounted for instant tab switching and zero-reload return from video playback, with one-time background MediaStore sync.
+  - Search by title or platform, filter by platform pills, view file size, and delete with confirmation.
   - Built-in full-screen video player powered by `flet-video` with playback error fallback.
+- **Automated Testing & CI**:
+  - Offline `pytest` unit test suite and `ruff` linting run automatically on every push and pull request to `main` via `.github/workflows/ci.yml`.
 - **Automated Releases**:
   - Android APK release builds target `arm64-v8a`.
   - GitHub Releases attach:
@@ -57,7 +61,8 @@ Vidsaver is a cross-platform video downloader built with **Python 3.14** and **F
 |   |   |-- bug_report.md
 |   |   `-- feature_request.md
 |   `-- workflows/
-|       |-- all-builds.yml                        (Windows + Android CI/CD)
+|       |-- all-builds.yml                        (Windows + Android release CI/CD on v* tags)
+|       |-- ci.yml                                (pytest, ruff, and py_compile on push/PR)
 |       `-- generate-android-keystore.yml
 |-- packages/
 |   |-- flet-media-scanner/                   (custom Flet extension — published to PyPI)
@@ -70,10 +75,16 @@ Vidsaver is a cross-platform video downloader built with **Python 3.14** and **F
 |   |   `-- splash_android.png
 |   |-- cookies.txt                           (optional yt-dlp cookies)
 |   |-- downloader.py                         (platform detection & yt-dlp runner)
+|   |-- home.py                               (HomeView URL input & progress card)
 |   |-- library.py                            (Downloads library, search, platform filters)
-|   |-- main.py                               (app entry point, HomeView, BottomNavBar)
+|   |-- main.py                               (app entry point, View stack, BottomNavBar)
 |   |-- player.py                             (built-in flet-video player)
+|   |-- storage.py                            (storage paths, URL checks & MediaStore helpers)
 |   `-- theme.py                              (Nocturnal Studio palettes, typography & helpers)
+|-- tests/
+|   |-- test_downloader.py                    (offline downloader unit tests)
+|   |-- test_storage.py                       (storage & URL validation tests)
+|   `-- test_theme.py                         (theme & UI helper tests)
 |-- CHANGELOG.md
 |-- CONTRIBUTING.md
 |-- LICENSE
@@ -101,6 +112,17 @@ Run as a web app:
 ```bash
 uv run flet run --web
 ```
+
+## Testing & Linting
+
+Run the offline unit test suite and linter locally:
+
+```bash
+uv run pytest
+uv run ruff check src tests
+```
+
+GitHub Actions automatically runs `py_compile`, `ruff`, and `pytest` on every push and pull request to `main` via `.github/workflows/ci.yml`.
 
 ## Android Permissions
 

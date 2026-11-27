@@ -47,16 +47,12 @@ Thank you for your interest in contributing to **Vidsaver**!
 
 ## Verification Before Opening a PR
 
-Run a compile check across all Python source files:
+Run the compile check, linter, and unit tests:
 
 ```bash
-uv run python -m py_compile src/theme.py src/main.py src/library.py src/player.py src/downloader.py
-```
-
-Verify the theme and modules import cleanly:
-
-```bash
-uv run python -c "import sys; sys.path.insert(0, 'src'); import theme, library, player, downloader; theme.light_theme(); theme.dark_theme(); print('OK')"
+uv run python -m py_compile src/main.py src/home.py src/library.py src/player.py src/storage.py src/downloader.py src/theme.py
+uv run ruff check src tests
+uv run pytest
 ```
 
 ## Pull Request Guidelines
