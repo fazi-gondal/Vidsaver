@@ -119,8 +119,16 @@ def BottomNavBar(active_tab: int, on_select):
 
 
 @ft.component
-def App(page: ft.Page, appbar: ft.AppBar):
+def App(page: ft.Page):
     """Root declarative App component returning View stack for native Back navigation."""
+    def _initial_dark() -> bool:
+        if page.theme_mode == ft.ThemeMode.DARK:
+            return True
+        if page.theme_mode == ft.ThemeMode.LIGHT:
+            return False
+        return page.platform_brightness != ft.Brightness.LIGHT
+
+    is_dark, set_is_dark = ft.use_state(_initial_dark)
     active_tab, set_active_tab = ft.use_state(0)
     playing_file, set_playing_file = ft.use_state(None)
     playing_file_ref = ft.use_ref(playing_file)
@@ -281,6 +289,34 @@ def App(page: ft.Page, appbar: ft.AppBar):
         expand=True,
     )
 
+    def toggle_theme(_):
+        new_dark = not is_dark
+        page.theme_mode = ft.ThemeMode.DARK if new_dark else ft.ThemeMode.LIGHT
+        page.update()
+        set_is_dark(new_dark)
+
+    appbar = ft.AppBar(
+        title=ft.Row(
+            controls=[
+                ft.Text("Vid", style=theme.headline_md()),
+                ft.Text("Saver", style=theme.headline_md(ft.Colors.PRIMARY)),
+            ],
+            spacing=0,
+            tight=True,
+        ),
+        center_title=False,
+        bgcolor=ft.Colors.SURFACE,
+        elevation=0,
+        actions=[
+            ft.IconButton(
+                icon=ft.Icons.DARK_MODE_OUTLINED if is_dark else ft.Icons.LIGHT_MODE_OUTLINED,
+                icon_color=ft.Colors.ON_SURFACE_VARIANT,
+                tooltip="Toggle light/dark theme",
+                on_click=toggle_theme,
+            )
+        ],
+    )
+
     views: list[ft.View] = [
         ft.View(
             route="/",
@@ -346,45 +382,7 @@ async def main(page: ft.Page):
     page.theme = theme.light_theme()
     page.dark_theme = theme.dark_theme()
 
-    def is_dark_mode() -> bool:
-        if page.theme_mode == ft.ThemeMode.DARK:
-            return True
-        if page.theme_mode == ft.ThemeMode.LIGHT:
-            return False
-        return page.platform_brightness != ft.Brightness.LIGHT
-
-    theme_btn = ft.IconButton(
-        icon=ft.Icons.DARK_MODE_OUTLINED if is_dark_mode() else ft.Icons.LIGHT_MODE_OUTLINED,
-        icon_color=ft.Colors.ON_SURFACE_VARIANT,
-        tooltip="Toggle light/dark theme",
-    )
-
-    def toggle_theme(_):
-        new_dark = not is_dark_mode()
-        page.theme_mode = ft.ThemeMode.DARK if new_dark else ft.ThemeMode.LIGHT
-        theme_btn.icon = (
-            ft.Icons.DARK_MODE_OUTLINED if new_dark else ft.Icons.LIGHT_MODE_OUTLINED
-        )
-        page.update()
-
-    theme_btn.on_click = toggle_theme
-
-    appbar = ft.AppBar(
-        title=ft.Row(
-            controls=[
-                ft.Text("Vid", style=theme.headline_md()),
-                ft.Text("Saver", style=theme.headline_md(ft.Colors.PRIMARY)),
-            ],
-            spacing=0,
-            tight=True,
-        ),
-        center_title=False,
-        bgcolor=ft.Colors.SURFACE,
-        elevation=0,
-        actions=[theme_btn],
-    )
-
-    page.render_views(App, page=page, appbar=appbar)
+    page.render_views(App, page=page)
 
     async def _post_launch_init() -> None:
         await asyncio.sleep(0)
