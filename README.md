@@ -11,7 +11,7 @@ Vidsaver is a cross-platform video downloader built with **Python 3.14** and **F
   - Custom `Space Grotesk` and `Inter` typography with tonal surface layering and `1px` subtle borders.
   - System light/dark theme support with a declarative moon/sun theme toggle in the top `AppBar`.
   - `BottomAppBar` navigation (`Home` & `Downloads`) with hover states and active indicator pill that stays beneath the soft keyboard while typing.
-  - Native `View` stack navigation (`page.render_views` + `on_view_pop`) so the Android Back button closes the video player instead of exiting the app.
+  - Native `View` stack navigation (`page.render_views`, `on_view_pop`, and `can_pop`/`on_confirm_pop`) so the Android Back button closes the video player to `Downloads` and returns from `Downloads` to `Home` instead of exiting the app.
   - Sunken borderless URL input with clipboard auto-paste on resume/focus, paste/clear actions, and automatic platform detection pill.
   - Compact live progress card with left-to-right progress gradient fill, status pill (`PREPARING`, `DOWNLOADING`, `SAVED`, `ERROR`), and floating completion `SnackBar`.
 - **Smart Format Selection**: Automatically detects `ffmpeg` (`bv*+ba` on desktop) and falls back to pre-muxed `b[ext=mp4]/b` on mobile so Instagram, Facebook, and social downloads work without `ffmpeg`.

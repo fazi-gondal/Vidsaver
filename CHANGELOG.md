@@ -38,7 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 - Placed `BottomNavBar` inside `ft.BottomAppBar` so it stays beneath the soft keyboard when typing on Android.
-- Switched to `page.render_views` with `page.on_view_pop` so the Android Back button closes `PlayerView` instead of exiting the app.
+- Switched to `page.render_views` with `page.on_view_pop` and `can_pop`/`on_confirm_pop` so the Android Back button closes `PlayerView` to Downloads and returns from Downloads to Home instead of exiting the app.
+- Colored the `VideoCard` delete icon in `Downloads` with `theme.PILL_RED`.
 - Managed theme toggle state declaratively inside `App` to prevent `RuntimeError: Frozen controls cannot be updated.`.
 - Removed deprecated `InputBorder.NONE` in favor of `NoInputBorder()`, removed unsupported `action_color` from `ft.SnackBar`, and removed thread-unsafe `page.update()` inside `run_download()`.
 
