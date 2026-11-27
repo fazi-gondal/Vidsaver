@@ -1,0 +1,53 @@
+name: CI (Tests & Lint)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_PYTHON: "3.14"
+  PYTHONUTF8: "1"
+
+jobs:
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            packages/flet-media-scanner/pyproject.toml
+
+      - name: Install Python and dependencies
+        run: |
+          uv python install 3.14
+          uv sync
+
+      - name: Syntax check (py_compile)
+        run: uv run python -m py_compile src/main.py src/home.py src/library.py src/player.py src/storage.py src/downloader.py src/theme.py
+
+      - name: Lint (ruff)
+        run: uv run ruff check src tests
+
+      - name: Run unit tests (pytest)
+        run: uv run pytest
