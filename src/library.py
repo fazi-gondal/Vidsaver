@@ -19,7 +19,6 @@ def VideoCard(file_name: str, meta: dict, on_play, on_delete):
     hovered, set_hovered = ft.use_state(False)
     info = meta.get(file_name, {})
     platform = info.get("platform", "Video")
-    date_str = info.get("date", "")
     pill_color = theme.PLATFORM_PILL_COLORS.get(platform, theme.PILL_CORAL)
     source_path = info.get("source_path") or info.get("file_path") or ""
 

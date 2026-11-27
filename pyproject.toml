@@ -22,6 +22,8 @@ dev = [
     "flet-cli==1.1.2",
     "flet-desktop==1.1.2",
     "flet-web==1.1.2",
+    "pytest>=9.0",
+    "ruff>=0.15",
 ]
 
 [tool.flet]
@@ -37,6 +39,26 @@ splash_android = "assets/splash_android.png"
 
 [tool.flet.app]
 path = "src"
+exclude = [
+    ".git",
+    ".github",
+    ".pytest_cache",
+    ".venv",
+    "build",
+    "dist",
+    "ref",
+    "tests",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "README.md",
+    "uv.lock",
+]
+
+[tool.flet.compile]
+app = true
+packages = true
+cleanup = true
 
 [tool.flet.android]
 split_per_abi = true
@@ -65,3 +87,16 @@ flet-media-scanner = { workspace = true }
 
 [tool.uv.workspace]
 members = ["packages/flet-media-scanner"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501"]
