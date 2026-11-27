@@ -259,20 +259,20 @@ async def delete_saved_video(page: ft.Page, info: dict) -> bool:
     return not content_uri and not source_path
 
 
-async def sync_saved_videos(page: ft.Page, metadata_path: str) -> None:
+async def sync_saved_videos(page: ft.Page, metadata_path: str) -> bool:
     """Restore app metadata from Android MediaStore after app updates."""
     if not is_android_page(page):
-        return
+        return False
 
     scanner = ensure_media_scanner(page)
     if scanner is None:
-        return
+        return False
 
     from downloader import load_metadata, save_metadata
 
     videos = await scanner.list_videos(album="Vidsaver")
     if not videos:
-        return
+        return False
 
     meta = load_metadata(metadata_path)
     changed = False
@@ -303,6 +303,7 @@ async def sync_saved_videos(page: ft.Page, metadata_path: str) -> None:
 
     if changed:
         save_metadata(metadata_path, meta)
+    return changed
 
 
 @ft.component
@@ -873,31 +874,42 @@ def App(page: ft.Page, appbar: ft.AppBar):
 
         asyncio.create_task(download_flow())
 
-    if active_tab == 0:
-        main_content = HomeView(
-            status_text_val=status_text,
-            progress_val=progress_val,
-            progress_visible=progress_visible,
-            download_disabled=download_disabled,
-            on_download_click=start_download,
-            on_open_downloads=lambda: set_active_tab(1),
-            page=page,
-        )
-    else:
-        from library import LibraryView
+    from library import LibraryView
 
-        directory, metadata = ensure_storage_paths(page)
-        main_content = LibraryView(
-            download_dir=directory,
-            metadata_path=metadata,
-            on_play=set_playing_file,
-            initial_scroll=scroll_offset,
-            on_scroll_change=set_scroll_offset,
-            refresh_trigger=refresh_trigger,
-            delete_from_storage=lambda info: delete_saved_video(page, info),
-            sync_from_storage=lambda: sync_saved_videos(page, metadata),
-            on_go_home=lambda: set_active_tab(0),
-        )
+    directory, metadata = ensure_storage_paths(page)
+    main_content = ft.Stack(
+        controls=[
+            ft.Container(
+                content=HomeView(
+                    status_text_val=status_text,
+                    progress_val=progress_val,
+                    progress_visible=progress_visible,
+                    download_disabled=download_disabled,
+                    on_download_click=start_download,
+                    on_open_downloads=lambda: set_active_tab(1),
+                    page=page,
+                ),
+                visible=active_tab == 0,
+                expand=True,
+            ),
+            ft.Container(
+                content=LibraryView(
+                    download_dir=directory,
+                    metadata_path=metadata,
+                    on_play=set_playing_file,
+                    initial_scroll=scroll_offset,
+                    on_scroll_change=set_scroll_offset,
+                    refresh_trigger=refresh_trigger,
+                    delete_from_storage=lambda info: delete_saved_video(page, info),
+                    sync_from_storage=lambda: sync_saved_videos(page, metadata),
+                    on_go_home=lambda: set_active_tab(0),
+                ),
+                visible=active_tab == 1,
+                expand=True,
+            ),
+        ],
+        expand=True,
+    )
 
     views: list[ft.View] = [
         ft.View(

@@ -164,6 +164,7 @@ def LibraryView(
     search_query, set_search_query = ft.use_state("")
     active_filter, set_active_filter = ft.use_state("All")
     list_ref = ft.use_memo(lambda: ft.Ref[ft.ListView](), dependencies=[])
+    synced_once_ref = ft.use_ref(False)
 
     def sort_key(item, loaded_meta):
         info = loaded_meta.get(item, {})
@@ -193,12 +194,16 @@ def LibraryView(
         set_files(valid_files)
 
     async def load_data():
-        if sync_from_storage:
+        # Render immediately from local metadata.json, then sync MediaStore once in background.
+        await read_data_async()
+        if sync_from_storage and not synced_once_ref.current:
+            synced_once_ref.current = True
             try:
-                await sync_from_storage()
+                changed = await sync_from_storage()
+                if changed:
+                    await read_data_async()
             except Exception:
                 pass
-        await read_data_async()
 
     ft.use_effect(load_data, dependencies=[refresh_trigger])
 
