@@ -45,7 +45,7 @@ Vidsaver is a cross-platform video downloader built with **Python 3.14** and **F
 
 | Light Mode | Dark Mode | List |
 | :---: | :---: | :---: |
-| ![home](/src/assets/home-dt.png) | ![home](/src/assets/home-dt-dark.png) | ![list](/src/assets/list-dt.png) |
+| ![home](/src/assets/home-dt.jpg) | ![home](/src/assets/home-dt-dark.jpg) | ![list](/src/assets/list-dt.jpg) |
 
 ## Tech Stack
 
